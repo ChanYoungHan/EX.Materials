@@ -21,7 +21,7 @@ class Variable:
         self.creator = func
         self.generation += 1
 
-    def backward(self, retain_grad=False):
+    def backward(self, retain_grad=False, create_graph=False):
         if self.grad is None:
             self.grad = np.ones_like(self.data)
 
@@ -39,7 +39,8 @@ class Variable:
         while funcs:
             f = funcs.pop()
             gys = [output().grad for output in f.outputs]
-            gxs = f.backward(*gys)
+            with using_config("enable_backprop", create_graph):
+                gxs = f.backward(*gys)
             if not isinstance(gxs, tuple):
                 gxs = (gxs,)
 
@@ -102,7 +103,7 @@ class Function:
                 output.set_creator(self)
             self.inputs = inputs
             self.outputs = [weakref.ref(output) for output in outputs]
-            return outputs if len(outputs) > 1 else outputs[0]
+        return outputs if len(outputs) > 1 else outputs[0]
 
     def forward(self, xs):
         raise NotImplemented

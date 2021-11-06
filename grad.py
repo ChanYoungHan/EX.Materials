@@ -35,17 +35,7 @@ def rosenbrock(x0, x1):
     return y
 
 
-def rosenbrock2_1(x0, x1):
-    y = 200 * (x1 - x0 ** 2)
-    return y
-
-
-def rosenbrock2_0(x0, x1):
-    y = -400 * x0 * (x1 - x0 ** 2) - 2 * (1 - x0)
-    return y
-
-
-script_type = "rosenbrock"
+script_type = "second gradient"
 if script_type == "torch":
 
     import torch
@@ -90,13 +80,27 @@ elif script_type == "rosenbrock":
 
     for i in range(iters):
         print(x0, x1)
-        # print(x0.grad, x1.grad)
 
         y = rosenbrock(x0, x1)
         x0.cleargrad()
         x1.cleargrad()
         y.backward()
-        print(x0.grad, x1.grad)
 
         x0 -= lr * x0.grad
         x1 -= lr * x1.grad
+
+elif script_type == "second gradient":
+
+    def f(x):
+        y = x ** 4 - 2 * x ** 2
+        return y
+
+    x = Variable(2.0)
+    y = f(x)
+    y.backward(create_graph=False)
+    print(x.grad)
+
+    gx = x.grad
+    x.cleargrad()
+    gx.backward()
+    print(x.grad)
