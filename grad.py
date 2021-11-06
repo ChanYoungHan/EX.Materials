@@ -35,7 +35,7 @@ def rosenbrock(x0, x1):
     return y
 
 
-script_type = "second gradient"
+script_type = "multi gradient of sin"
 if script_type == "torch":
 
     import torch
@@ -97,10 +97,24 @@ elif script_type == "second gradient":
 
     x = Variable(2.0)
     y = f(x)
-    y.backward(create_graph=False)
+    print("backward start")
+    y.backward(create_graph=True)
     print(x.grad)
 
     gx = x.grad
     x.cleargrad()
     gx.backward()
     print(x.grad)
+
+elif script_type == "multi gradient of sin":
+    import dezero.functions as F
+
+    x = Variable(1.0)
+    y = F.sin(x)
+    y.backward(create_graph=True)
+
+    for i in range(3):
+        gx = x.grad
+        x.cleargrad()
+        gx.backward(create_graph=True)
+        print(x.grad)
