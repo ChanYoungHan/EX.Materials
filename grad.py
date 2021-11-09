@@ -35,7 +35,7 @@ def rosenbrock(x0, x1):
     return y
 
 
-script_type = "multi gradient of sin"
+script_type = "new"
 if script_type == "torch":
 
     import torch
@@ -55,7 +55,7 @@ if script_type == "torch":
     z.backward()
     print(x_tensor.grad)
 
-elif script_type == "tailer":
+elif script_type == "gradient of sin":
     x = Variable(np.array(np.pi / 4))
     y1 = sin(x)
     y1.backward()
@@ -108,13 +108,50 @@ elif script_type == "second gradient":
 
 elif script_type == "multi gradient of sin":
     import dezero.functions as F
+    import matplotlib.pyplot as plt
 
-    x = Variable(1.0)
+    x = Variable(np.linspace(-7, 7, 200))
     y = F.sin(x)
     y.backward(create_graph=True)
 
+    logs = [y.data]
+
     for i in range(3):
+        logs.append(x.grad.data)
         gx = x.grad
         x.cleargrad()
         gx.backward(create_graph=True)
-        print(x.grad)
+
+    labels = ["y=sin(x)", "y'", "y''", "y'''"]
+    for i, v in enumerate(logs):
+        plt.plot(x.data, logs[i], label=labels[i])
+    plt.legend(loc="lower right")
+    plt.show()
+
+elif script_type == "tanh":
+    import dezero.functions as F
+
+    x = Variable(1)
+    y = F.tanh(x)
+    x.name = "x"
+    y.name = "y"
+    y.backward(create_graph=True)
+
+    iters = 0
+
+    for i in range(iters):
+        gx = x.grad
+        x.cleargrad()
+        gx.backward(create_graph=True)
+
+    gx = x.grad
+    gx.name = "gx" + str(iters + 1)
+    plot_dot_graph(gx, verbose=False, to_file="tanh.png")
+
+elif script_type == "new":
+    import dezero.functions as F
+
+    x = Variable(np.array([[1, 2, 3], [4, 5, 6]]))
+    y = F.reshape(x, (6,))
+    y.backward(retain_grad=True)
+    print(x.grad)
