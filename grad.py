@@ -4,6 +4,16 @@ from dezero import Function, Variable
 from dezero.utils import plot_dot_graph
 
 
+def set_up():
+    import os, sys
+
+    fd = os.path.abspath(__file__)
+    if fd in sys.path:
+        print("already installed")
+    else:
+        print("install success")
+
+
 class Sin(Function):
     def forward(self, x):
         y = np.sin(x)
@@ -35,6 +45,7 @@ def rosenbrock(x0, x1):
     return y
 
 
+set_up()
 script_type = "new"
 if script_type == "torch":
 
@@ -148,10 +159,36 @@ elif script_type == "tanh":
     gx.name = "gx" + str(iters + 1)
     plot_dot_graph(gx, verbose=False, to_file="tanh.png")
 
+elif script_type == "reshape-transpose":
+    import dezero.functions as F
+
+    input_numpy_array = np.array([[1, 2, 3], [4, 5, 6]])
+    to_reshape_arg = (3, 2)
+    x = Variable(input_numpy_array)
+    y = F.reshape(x, to_reshape_arg)
+    z = F.transpose(y)
+    z.backward(retain_grad=True)
+    print(x)
+    print(y)
+    print(z)
+    print(x.grad)
+
 elif script_type == "new":
     import dezero.functions as F
 
-    x = Variable(np.array([[1, 2, 3], [4, 5, 6]]))
-    y = F.reshape(x, (6,))
-    y.backward(retain_grad=True)
+    input_numpy_array = np.array([[1, 2, 3], [4, 5, 6]])
+
+    x = Variable(input_numpy_array)
+    y = F.sum(x, axis=0)
+    y.backward()
+    print(x)
+    print(y)
     print(x.grad)
+    x.cleargrad()
+
+    y = Variable(10)
+    z = x + y
+    z.backward()
+
+    print(x.grad)
+    print(y.grad)
