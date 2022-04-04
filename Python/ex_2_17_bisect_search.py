@@ -14,6 +14,11 @@ def demo(bisect_fn):
         print(ROW_FMT.format(needle, position, offset))
 
 
+def grade(score, breakpoints=[60, 70, 80, 90], grades="FDCBA"):
+    i = bisect.bisect(breakpoints, score)
+    return grades[i]
+
+
 if __name__ == "__main__":
     if sys.argv[-1] == "left":
         bisect_fn = bisect.bisect_left
@@ -23,3 +28,8 @@ if __name__ == "__main__":
     print("DEMO:", bisect_fn.__name__)
     print("heystack ->", " ".join("%2d" % n for n in HAYSTACK))
     demo(bisect_fn)
+
+    print("------------------------")
+    print("Grade Search with Bisect")
+    print("score : [33, 99, 77, 70, 89, 90, 100]")
+    print("grade :", [grade(score) for score in [33, 99, 77, 70, 89, 90, 100]])
