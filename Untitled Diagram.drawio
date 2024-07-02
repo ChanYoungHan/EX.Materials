@@ -1,6 +1,6 @@
-<mxfile host="app.diagrams.net" modified="2024-07-02T05:12:29.426Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" etag="mWhZ2E-kRIB_bgITAcF1" version="24.6.4" type="github" pages="2">
+<mxfile host="app.diagrams.net" modified="2024-07-02T05:16:35.696Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" etag="NB3XoI2ZLXb23iVc0Xxx" version="24.6.4" type="github" pages="2">
   <diagram name="Page-1" id="fkXmSrqDXGMn1KloiKd-">
-    <mxGraphModel dx="788" dy="751" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="733" dy="551" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -15,7 +15,7 @@
         <mxCell id="DcZjScobFBak7mAWFxaP-1" value="ARVM API Server" style="rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="200" y="590" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="8QFcEcYpzFaWrhuM-E7l-4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="8QFcEcYpzFaWrhuM-E7l-1" target="DcZjScobFBak7mAWFxaP-1">
+        <mxCell id="8QFcEcYpzFaWrhuM-E7l-4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;verticalAlign=middle;startArrow=classic;startFill=1;" edge="1" parent="1" source="8QFcEcYpzFaWrhuM-E7l-1" target="DcZjScobFBak7mAWFxaP-1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="8QFcEcYpzFaWrhuM-E7l-1" value="mongo : arvm" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="1">
@@ -70,6 +70,12 @@
         </mxCell>
         <mxCell id="8zPTLsI89GPhtEggklUx-3" value="mongo : sync-jira" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="1">
           <mxGeometry x="1012.5" y="580" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="XQ-C5GzcrMIA5m7cdBi8-3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="XQ-C5GzcrMIA5m7cdBi8-2" target="DcZjScobFBak7mAWFxaP-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="XQ-C5GzcrMIA5m7cdBi8-2" value="ARVM API Server" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="10" y="590" width="120" height="60" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
