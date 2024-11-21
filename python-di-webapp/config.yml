@@ -1,0 +1,3 @@
+db:
+  # url: "sqlite:///./webapp.db"
+  url: "postgresql://postgres:postgres@postgres:5432/postgres"
