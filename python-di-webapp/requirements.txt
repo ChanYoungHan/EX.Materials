@@ -1,0 +1,13 @@
+loguru
+dependency-injector
+fastapi
+uvicorn
+pyyaml
+sqlalchemy
+pytest
+requests
+pytest-cov
+psycopg2
+httpx
+python-multipart
+minio
