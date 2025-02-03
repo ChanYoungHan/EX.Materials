@@ -1,7 +1,7 @@
 """Database module."""
 
 from contextlib import contextmanager, AbstractContextManager
-from typing import Callable
+from typing import Callable, Generator
 import logging
 
 from sqlalchemy import create_engine, orm
@@ -29,7 +29,7 @@ class Database:
         Base.metadata.create_all(self._engine)
 
     @contextmanager
-    def session(self) -> Callable[..., AbstractContextManager[Session]]:
+    def session(self) -> Generator[Session, None, None]:
         session: Session = self._session_factory()
         try:
             yield session

@@ -24,10 +24,8 @@ def get_by_id(
         user_id: int,
         user_service: UserService = Depends(Provide[Container.user_service]),
 ):
-    try:
-        return user_service.get_user_by_id(user_id)
-    except NotFoundError:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    user, status_code = user_service.get_user_by_id(user_id)
+    return Response(status_code=status_code) if user is None else user
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
@@ -44,12 +42,8 @@ def remove(
         user_id: int,
         user_service: UserService = Depends(Provide[Container.user_service]),
 ):
-    try:
-        user_service.delete_user_by_id(user_id)
-    except NotFoundError:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    status_code = user_service.delete_user_by_id(user_id)
+    return Response(status_code=status_code)
 
 
 @router.get("/status")
