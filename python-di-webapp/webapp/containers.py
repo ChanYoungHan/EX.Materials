@@ -11,7 +11,9 @@ class Container(containers.DeclarativeContainer):
 
     wiring_config = containers.WiringConfiguration(modules=[".endpoints"])
 
-    config = providers.Configuration(yaml_files=["config.yml"])
+    config = providers.Configuration()
+    config.from_yaml("config.yml")
+
 
     db = providers.Singleton(Database, db_url=config.db.url)
 

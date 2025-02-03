@@ -9,6 +9,7 @@ from . import endpoints
 
 def create_app() -> FastAPI:
     container = Container()
+    container.init_resources()
 
     db = container.db()
     db.create_database()
