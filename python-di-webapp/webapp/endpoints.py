@@ -5,34 +5,32 @@ from dependency_injector.wiring import inject, Provide
 
 from .containers import Container
 from .services import UserService
-from .repositories import NotFoundError
-
+from .schemas import UserResponse
 router = APIRouter()
 
 
-@router.get("/users")
+@router.get("/users", response_model=list[UserResponse])
 @inject
 def get_list(
         user_service: UserService = Depends(Provide[Container.user_service]),
-):
+) -> list[UserResponse]:
     return user_service.get_users()
 
 
-@router.get("/users/{user_id}")
+@router.get("/users/{user_id}", response_model=UserResponse)
 @inject
 def get_by_id(
         user_id: int,
         user_service: UserService = Depends(Provide[Container.user_service]),
-):
-    user, status_code = user_service.get_user_by_id(user_id)
-    return Response(status_code=status_code) if user is None else user
+) -> UserResponse | Response:
+    return user_service.get_user_by_id(user_id)
 
 
-@router.post("/users", status_code=status.HTTP_201_CREATED)
+@router.post("/users", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
 @inject
 def add(
         user_service: UserService = Depends(Provide[Container.user_service]),
-):
+) -> UserResponse:
     return user_service.create_user()
 
 
@@ -41,9 +39,8 @@ def add(
 def remove(
         user_id: int,
         user_service: UserService = Depends(Provide[Container.user_service]),
-):
-    status_code = user_service.delete_user_by_id(user_id)
-    return Response(status_code=status_code)
+) -> Response:
+    return user_service.delete_user_by_id(user_id)
 
 
 @router.get("/status")

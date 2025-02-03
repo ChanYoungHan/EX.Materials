@@ -11,3 +11,4 @@ psycopg2
 httpx
 python-multipart
 minio
+pydantic[email]

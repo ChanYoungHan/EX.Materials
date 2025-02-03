@@ -1,4 +1,8 @@
-"""Repositories module."""
+"""
+Repositories module.
+Repository returns should be schemas. Because it can't used after commit.
+"""
+
 
 from contextlib import AbstractContextManager
 from typing import Callable, Iterator
@@ -19,10 +23,11 @@ class UserRepository:
 
     def get_by_id(self, user_id: int) -> User:
         with self.session_factory() as session:
-            user = session.query(User).filter(User.id == user_id).first()
+            user = session.query(User).filter(User.id == user_id).scalar()
             if not user:
                 raise UserNotFoundError(user_id)
             return user
+    
 
     def add(self, email: str, password: str, is_active: bool = True) -> User:
         with self.session_factory() as session:
