@@ -15,7 +15,6 @@ def get_user_service(
     return user_service
 
 @router.get("/users", response_model=list[UserResponse])
-@inject
 def get_list(
         user_service: UserService = Depends(get_user_service),
 ) -> list[UserResponse]:
@@ -23,7 +22,6 @@ def get_list(
 
 
 @router.get("/users/{user_id}", response_model=UserResponse)
-@inject
 def get_by_id(
         user_id: int,
         user_service: UserService = Depends(get_user_service),
@@ -32,7 +30,6 @@ def get_by_id(
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
-@inject
 def add(
         user_service: UserService = Depends(get_user_service),
 ) -> UserResponse:
@@ -40,7 +37,6 @@ def add(
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-@inject
 def remove(
         user_id: int,
         user_service: UserService = Depends(get_user_service),
