@@ -3,8 +3,8 @@
 from dependency_injector import containers, providers
 
 from .database import Database
-from .repositories import UserRepository
-from .services import UserService
+from .repositories import UserRepository, OrderRepository
+from .services import UserService, OrderService
 
 
 class Container(containers.DeclarativeContainer):
@@ -25,4 +25,14 @@ class Container(containers.DeclarativeContainer):
     user_service = providers.Factory(
         UserService,
         user_repository=user_repository,
+    )
+
+    order_repository = providers.Factory(
+        OrderRepository,
+        session_factory=db.provided.session,
+    )
+
+    order_service = providers.Factory(
+        OrderService,
+        order_repository=order_repository,
     )

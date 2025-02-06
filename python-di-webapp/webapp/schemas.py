@@ -21,3 +21,14 @@ class UserResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class OrderRequest(BaseModel):
+    name: str
+    type: str
+
+
+class OrderResponse(BaseModel):
+    id: int
+    name: str
+    type: str
+

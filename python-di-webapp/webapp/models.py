@@ -14,3 +14,11 @@ class User(Base):
     email = Column(String, unique=True)
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    type = Column(String, nullable=False)

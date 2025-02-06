@@ -24,9 +24,14 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-
     app.container = container
-    app.include_router(endpoints.router)
+    app.include_router(endpoints.user_router)
+    app.include_router(endpoints.order_router)
+
+    @app.get("/status")
+    def get_status():
+        return {"status": "OK"}
+
     return app
 
 
