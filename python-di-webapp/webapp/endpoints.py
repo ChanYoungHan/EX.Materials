@@ -8,11 +8,16 @@ from .services import UserService
 from .schemas import UserResponse
 router = APIRouter()
 
+@inject
+def get_user_service(
+    user_service: UserService = Depends(Provide[Container.user_service])
+) -> UserService:
+    return user_service
 
 @router.get("/users", response_model=list[UserResponse])
 @inject
 def get_list(
-        user_service: UserService = Depends(Provide[Container.user_service]),
+        user_service: UserService = Depends(get_user_service),
 ) -> list[UserResponse]:
     return user_service.get_users()
 
@@ -21,7 +26,7 @@ def get_list(
 @inject
 def get_by_id(
         user_id: int,
-        user_service: UserService = Depends(Provide[Container.user_service]),
+        user_service: UserService = Depends(get_user_service),
 ) -> UserResponse | Response:
     return user_service.get_user_by_id(user_id)
 
@@ -29,7 +34,7 @@ def get_by_id(
 @router.post("/users", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
 @inject
 def add(
-        user_service: UserService = Depends(Provide[Container.user_service]),
+        user_service: UserService = Depends(get_user_service),
 ) -> UserResponse:
     return user_service.create_user()
 
@@ -38,7 +43,7 @@ def add(
 @inject
 def remove(
         user_id: int,
-        user_service: UserService = Depends(Provide[Container.user_service]),
+        user_service: UserService = Depends(get_user_service),
 ) -> Response:
     return user_service.delete_user_by_id(user_id)
 
