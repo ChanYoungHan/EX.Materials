@@ -53,7 +53,7 @@ class OrderService:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
     def create_order(self, order_request: OrderRequest) -> OrderResponse:
-        order = self._repository.add(name=order_request.name, type=order_request.type)
+        order = self._repository.add(order_request)
         return OrderResponse.model_validate(order)
 
     def delete_order_by_id(self, order_id: int) -> Response:

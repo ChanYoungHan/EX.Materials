@@ -25,12 +25,12 @@ class UserResponse(BaseModel):
 class OrderRequest(BaseModel):
     name: str
     type: str
-
+    quantity: int
 
 class OrderResponse(BaseModel):
     id: int
     name: str
     type: str
-
+    quantity: int
     model_config = ConfigDict(from_attributes=True)
 

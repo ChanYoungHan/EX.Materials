@@ -10,7 +10,7 @@ from typing import Callable, Iterator
 from sqlalchemy.orm import Session
 
 from .models import User, Order
-
+from .schemas import OrderRequest
 
 class UserRepository:
 
@@ -61,9 +61,9 @@ class OrderRepository:
                 raise OrderNotFoundError(order_id)
             return order
 
-    def add(self, name: str, type: str) -> Order:
+    def add(self, order_request: OrderRequest) -> Order:
         with self.session_factory() as session:
-            order = Order(name=name, type=type)
+            order = Order(**order_request.model_dump())
             session.add(order)
             session.commit()
             session.refresh(order)
