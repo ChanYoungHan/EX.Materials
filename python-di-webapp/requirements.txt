@@ -12,3 +12,4 @@ httpx
 python-multipart
 minio
 pydantic[email]
+alembic
