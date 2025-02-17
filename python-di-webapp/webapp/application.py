@@ -11,9 +11,6 @@ def create_app() -> FastAPI:
     container = Container()
     container.init_resources()
 
-    db = container.db()
-    db.create_database()
-
     app = FastAPI()
 
     app.add_middleware(

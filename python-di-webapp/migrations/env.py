@@ -14,6 +14,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+from webapp.models import User, Order  # 이 줄을 추가
 from webapp.database import Base
 target_metadata = Base.metadata
 

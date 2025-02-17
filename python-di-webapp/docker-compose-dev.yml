@@ -22,6 +22,9 @@ services:
     # 마이그레이션 수행 후 컨테이너 종료
     command: alembic upgrade head
     restart: "no"
+    volumes:
+      - "./:/code"
+      - "./migrations:/code/migrations"
 
   webapp:
     image: webapp

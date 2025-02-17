@@ -22,3 +22,4 @@ class Order(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     type = Column(String, nullable=False)
+    # quantity = Column(String, nullable=False)
