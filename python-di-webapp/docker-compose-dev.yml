@@ -8,19 +8,27 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
     ports:
-      - 5432:5432
+      - "5432:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
       interval: 10s
       timeout: 5s
       retries: 5
-  
-  webapp:
-    depends_on:
-      postgres : 
-        condition: service_healthy
-    build: ./
+
+  migrate:
     image: webapp
+    depends_on:
+      - postgres
+    # 마이그레이션 수행 후 컨테이너 종료
+    command: alembic upgrade head
+    restart: "no"
+
+  webapp:
+    image: webapp
+    depends_on:
+      - postgres
+      # migrate 컨테이너가 실행 완료되어야 webapp 실행 (컨테이너가 종료된 상태여도 아래와 같이 depends_on 설정합니다)
+      - migrate
     ports:
       - "8000:8000"
     volumes:
