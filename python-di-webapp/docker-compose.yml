@@ -15,10 +15,21 @@ services:
       timeout: 5s
       retries: 5
   
+  migrate:
+    image: webapp
+    depends_on:
+      - postgres
+    # 마이그레이션 수행 후 컨테이너 종료
+    command: alembic upgrade head
+    restart: "no"
+    volumes:
+      - "./:/code"
+      - "./migrations:/code/migrations"
+
   webapp:
     depends_on:
-      postgres : 
-        condition: service_healthy
+      - postgres
+      - migrate
     build: ./
     image: webapp
     ports:
