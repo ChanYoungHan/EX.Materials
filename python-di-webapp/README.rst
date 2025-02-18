@@ -94,3 +94,35 @@ The output should be something like:
    webapp/tests.py             59      0   100%
    --------------------------------------------
    TOTAL                      199     29    85%
+
+Migrations
+----------
+
+To create a new migration, run:
+
+.. code-block:: bash
+
+   docker-compose run --rm webapp alembic revision --autogenerate -m "migration_name"
+
+Activation
+----------
+
+Due to lack of service execution options in docker-compose, services need to be run individually.
+
+First, run the database service:
+
+.. code-block:: bash
+
+   docker-compose up -d postgres
+
+Second, run the migration service:
+
+.. code-block:: bash
+
+   docker-compose up migrations
+
+Third, run the webapp service:
+
+.. code-block:: bash
+
+   docker-compose up -d webapp
