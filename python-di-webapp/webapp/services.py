@@ -2,11 +2,12 @@
 
 from uuid import uuid4
 from typing import Iterator, Tuple
-from fastapi import status, Response
+from fastapi import status, Response, HTTPException
+from datetime import timedelta
 
 from .repositories import UserRepository, NotFoundError, OrderRepository
 from .schemas import UserResponse, OrderResponse, OrderRequest
-from .security import verify_password, get_password_hash
+from .security import verify_password, get_password_hash, decode_access_token, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 class UserService:
@@ -70,3 +71,68 @@ class OrderService:
             return Response(status_code=status.HTTP_204_NO_CONTENT)
         except NotFoundError:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
+
+
+class AuthService:
+    def __init__(self, user_repository) -> None:
+        self._user_repository = user_repository
+
+    def signup(self, user_req) -> dict:
+        existing_user = self._user_repository.get_by_email(user_req.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="해당 이메일로 가입된 사용자가 이미 존재합니다."
+            )
+        hashed_pw = get_password_hash(user_req.password)
+        new_user = self._user_repository.add(
+            email=user_req.email,
+            password=hashed_pw,
+            is_active=user_req.is_active,
+            role="user"
+        )
+        return new_user
+
+    def login(self, username: str, password: str) -> dict:
+        user = self._user_repository.get_by_email(username)
+        if not user or not verify_password(password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="이메일 또는 비밀번호가 올바르지 않습니다.",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        access_token = create_access_token(
+            data={"sub": user.email, "role": user.role},
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    def get_current_user(self, token: str):
+        payload = decode_access_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="유효하지 않은 토큰입니다.",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        email = payload.get("sub")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="토큰 정보에 이메일이 없습니다."
+            )
+        user = self._user_repository.get_by_email(email)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="해당 유저가 존재하지 않습니다."
+            )
+        return user
+
+    def require_admin(self, user):
+        if user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="관리자 권한이 없습니다."
+            )
+        return user
