@@ -24,6 +24,7 @@ def create_app() -> FastAPI:
     app.container = container
     app.include_router(endpoints.user_router)
     app.include_router(endpoints.order_router)
+    app.include_router(endpoints.auth_router)
 
     @app.get("/status")
     def get_status():

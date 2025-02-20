@@ -6,6 +6,7 @@ from fastapi import status, Response
 
 from .repositories import UserRepository, NotFoundError, OrderRepository
 from .schemas import UserResponse, OrderResponse, OrderRequest
+from .security import verify_password, get_password_hash
 
 
 class UserService:
@@ -24,9 +25,16 @@ class UserService:
         except NotFoundError:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
+    def get_user_by_email(self, email: str):
+        return self._repository.get_by_email(email)
+
     def create_user(self) -> UserResponse:
         uid = uuid4()
         user = self._repository.add(email=f"{uid}@email.com", password="pwd")
+        return UserResponse.model_validate(user)
+
+    def create_user_with_credential(self, email: str, hashed_password: str, is_active: bool, role: str):
+        user = self._repository.add(email=email, password=hashed_password, is_active=is_active, role=role)
         return UserResponse.model_validate(user)
 
     def delete_user_by_id(self, user_id: int) -> Response:

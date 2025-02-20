@@ -13,3 +13,7 @@ python-multipart
 minio
 pydantic[email]
 alembic
+passlib
+jose
+python-jose
+bcrypt

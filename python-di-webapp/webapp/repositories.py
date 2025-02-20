@@ -28,10 +28,13 @@ class UserRepository:
                 raise UserNotFoundError(user_id)
             return user
     
-
-    def add(self, email: str, password: str, is_active: bool = True) -> User:
+    def get_by_email(self, email: str) -> User:
         with self.session_factory() as session:
-            user = User(email=email, hashed_password=password, is_active=is_active)
+            return session.query(User).filter(User.email == email).first()
+
+    def add(self, email: str, password: str, is_active: bool, role: str = "user") -> User:
+        with self.session_factory() as session:
+            user = User(email=email, hashed_password=password, is_active=is_active, role=role)
             session.add(user)
             session.commit()
             session.refresh(user)
