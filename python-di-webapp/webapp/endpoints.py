@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 from .containers import Container
 from .services import UserService, OrderService, AuthService
-from .schemas import UserResponse, OrderResponse, OrderRequest, UserRequest
+from .schemas import UserResponse, OrderResponse, OrderRequest, UserRequest, AuthResponse
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -44,7 +44,7 @@ order_router = APIRouter(prefix="/orders", tags=["orders"], dependencies=[Depend
 def signup(user_req: UserRequest, auth_service: AuthService = Depends(get_auth_service)):
     return auth_service.signup(user_req)
 
-@auth_router.post("/login")
+@auth_router.post("/login", response_model=AuthResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), auth_service: AuthService = Depends(get_auth_service)):
     return auth_service.login(form_data.username, form_data.password)
 

@@ -34,3 +34,10 @@ class OrderResponse(BaseModel):
     quantity: int
     model_config = ConfigDict(from_attributes=True)
 
+
+class AuthResponse(BaseModel):
+    """Response schema for authentication."""
+    access_token: str
+    token_type: str
+    user: UserResponse
+

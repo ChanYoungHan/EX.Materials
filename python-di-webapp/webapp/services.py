@@ -1,12 +1,11 @@
 """Services module."""
 
 from uuid import uuid4
-from typing import Iterator, Tuple
 from fastapi import status, Response, HTTPException
 from datetime import timedelta
 
 from .repositories import UserRepository, NotFoundError, OrderRepository
-from .schemas import UserResponse, OrderResponse, OrderRequest
+from .schemas import UserResponse, OrderResponse, OrderRequest, AuthResponse
 from .security import verify_password, get_password_hash, decode_access_token, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 
 
@@ -93,7 +92,7 @@ class AuthService:
         )
         return new_user
 
-    def login(self, username: str, password: str) -> dict:
+    def login(self, username: str, password: str) -> AuthResponse:
         user = self._user_repository.get_by_email(username)
         if not user or not verify_password(password, user.hashed_password):
             raise HTTPException(
@@ -105,7 +104,11 @@ class AuthService:
             data={"sub": user.email, "role": user.role},
             expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
-        return {"access_token": access_token, "token_type": "bearer"}
+        return AuthResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=UserResponse.model_validate(user)
+        )
 
     def get_current_user(self, token: str):
         payload = decode_access_token(token)
