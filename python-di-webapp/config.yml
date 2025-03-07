@@ -1,3 +1,10 @@
 db:
   # url: "sqlite:///./webapp.db"
   url: "postgresql://postgres:postgres@postgres:5432/postgres"
+
+minio:
+  endpoint: "minio.chanyoung.site"
+  access_key: "os0ReCZr0rVou3GU1vLn"
+  secret_key: "4Dc78CGHiWrVHBS2AcyABVVtA6bRuy4sk11U7v4C"
+  secure: true
+  bucket_name: "di-template"

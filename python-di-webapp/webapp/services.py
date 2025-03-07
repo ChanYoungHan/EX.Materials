@@ -1,36 +1,63 @@
 """Services module."""
 
 from uuid import uuid4
-from fastapi import status, Response, HTTPException
+from fastapi import status, Response, HTTPException, UploadFile
 from datetime import timedelta
+import uuid
+from loguru import logger
 
-from .repositories import UserRepository, NotFoundError, OrderRepository
+from .repositories import UserRepository, NotFoundError, OrderRepository, MinioRepository
 from .schemas import UserResponse, OrderResponse, OrderRequest, AuthResponse
 from .security import verify_password, get_password_hash, decode_access_token, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from .utils import PathHelper, TableType
 
+class PresignedUrlResolverMixin:
+    """
+    공통 presigned URL 변환 로직을 제공하는 믹스인 클래스입니다.
+    단일 파일 경로 또는 경로 리스트를 presigned URL로 변환하는 헬퍼 메서드를 포함합니다.
+    """
+    def _resolve_single_presigned_url(self, model, path_field: str, url_field: str) -> None:
+        file_path = getattr(model, path_field, None)
+        if file_path:
+            setattr(model, url_field, self.minio_repository.get_presigned_url(file_path))
 
-class UserService:
+    def _resolve_list_presigned_urls(self, model, path_field: str, url_field: str) -> None:
+        file_paths = getattr(model, path_field, None)
+        if file_paths:
+            setattr(model, url_field, [self.minio_repository.get_presigned_url(path) for path in file_paths])
 
-    def __init__(self, user_repository: UserRepository) -> None:
+class UserService(PresignedUrlResolverMixin):
+
+    def __init__(self, user_repository: UserRepository, minio_repository: MinioRepository) -> None:
         self._repository: UserRepository = user_repository
+        self.minio_repository = minio_repository
 
     def get_users(self) -> list[UserResponse]:
         users = self._repository.get_all()
+        for user in users:
+            self._resolve_single_presigned_url(user, 'profile_image_path', 'profile_image_url')
         return [UserResponse.model_validate(user) for user in users]
 
     def get_user_by_id(self, user_id: int) -> UserResponse | Response:
         try:
-            user = self._repository.get_by_id(user_id)            
-            return UserResponse.model_validate(user) if user is not None else Response(status_code=status.HTTP_404_NOT_FOUND)
+            user = self._repository.get_by_id(user_id)
+            if user:
+                self._resolve_single_presigned_url(user, 'profile_image_path', 'profile_image_url')
+                return UserResponse.model_validate(user)
+            else:
+                return Response(status_code=status.HTTP_404_NOT_FOUND)
         except NotFoundError:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
     def get_user_by_email(self, email: str):
-        return self._repository.get_by_email(email)
+        user = self._repository.get_by_email(email)
+        if user:
+            self._resolve_single_presigned_url(user, 'profile_image_path', 'profile_image_url')
+        return user
 
     def create_user(self) -> UserResponse:
         uid = uuid4()
-        user = self._repository.add(email=f"{uid}@email.com", password="pwd")
+        user = self._repository.add(email=f"{uid}@email.com", password="pwd", is_active=True, role="user")
         return UserResponse.model_validate(user)
 
     def create_user_with_credential(self, email: str, hashed_password: str, is_active: bool, role: str):
@@ -44,19 +71,41 @@ class UserService:
         except NotFoundError:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
+    def upload_profile_image(self, user_id: int, file: UploadFile):
+        image_id = uuid.uuid4().hex
+        file_path = PathHelper.generate_user_profile_path(user_id, image_id, file.filename)
+        
+        file_data = file.file
+        file_data.seek(0, 2)
+        file_size = file_data.tell()
+        file_data.seek(0)
+        content_type = file.content_type
 
-class OrderService:
-    def __init__(self, order_repository: OrderRepository) -> None:
+        object_key = self.minio_repository.upload_file(file_data, file_size, content_type, file_path)
+        updated_user = self._repository.update_profile_image(user_id, object_key)
+        self._resolve_single_presigned_url(updated_user, 'profile_image_path', 'profile_image_url')
+        return UserResponse.model_validate(updated_user)
+
+
+class OrderService(PresignedUrlResolverMixin):
+    def __init__(self, order_repository: OrderRepository, minio_repository: MinioRepository) -> None:
         self._repository: OrderRepository = order_repository
+        self.minio_repository = minio_repository
 
     def get_orders(self) -> list[OrderResponse]:
         orders = self._repository.get_all()
+        for order in orders:
+            self._resolve_list_presigned_urls(order, 'order_image_path_list', 'order_image_url_list')
         return [OrderResponse.model_validate(order) for order in orders]
 
     def get_order_by_id(self, order_id: int) -> OrderResponse | Response:
         try:
             order = self._repository.get_by_id(order_id)
-            return OrderResponse.model_validate(order) if order is not None else Response(status_code=status.HTTP_404_NOT_FOUND)
+            if order:
+                self._resolve_list_presigned_urls(order, 'order_image_path_list', 'order_image_url_list')
+                return OrderResponse.model_validate(order)
+            else:
+                return Response(status_code=status.HTTP_404_NOT_FOUND)
         except NotFoundError:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
@@ -70,6 +119,37 @@ class OrderService:
             return Response(status_code=status.HTTP_204_NO_CONTENT)
         except NotFoundError:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
+
+    def upload_order_image(self, order_id: int, file: UploadFile):
+        image_id = uuid.uuid4().hex
+        file_path = PathHelper.generate_order_image_path(order_id, image_id, file.filename)
+        
+        file_data = file.file
+        file_data.seek(0, 2)
+        file_size = file_data.tell()
+        file_data.seek(0)
+        content_type = file.content_type
+
+        object_key = self.minio_repository.upload_file(file_data, file_size, content_type, file_path)
+        updated_order = self._repository.add_order_image_path(order_id, object_key)
+        self._resolve_list_presigned_urls(updated_order, 'order_image_path_list', 'order_image_url_list')
+        return OrderResponse.model_validate(updated_order)
+
+    def delete_order_image_path_list(self, order_id: int) -> OrderResponse:
+        # 기존 이미지 경로 목록 가져오기
+        order = self._repository.get_by_id(order_id)
+        image_paths = order.order_image_path_list or []
+        
+        # S3에서 이미지 파일들 삭제
+        for image_path in image_paths:
+            try:
+                self.minio_repository.delete_file(image_path)
+            except ValueError as e:
+                logger.error(f"Failed to delete file {image_path}: {str(e)}")
+                
+        # DB에서 이미지 경로 목록 삭제
+        updated_order = self._repository.delete_order_image_path_list(order_id)
+        return OrderResponse.model_validate(updated_order)
 
 
 class AuthService:

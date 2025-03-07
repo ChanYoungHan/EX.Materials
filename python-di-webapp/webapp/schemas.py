@@ -1,7 +1,6 @@
 # schemas.py
-from pydantic import BaseModel, ConfigDict, EmailStr
-from typing import List, Optional
-from datetime import datetime
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from typing import List, Union
 
 
 class UserRequest(BaseModel):
@@ -18,8 +17,9 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
     is_active: bool = True
+    profileImageUrl: Union[str, None] = Field(default=None, alias="profile_image_url")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class OrderRequest(BaseModel):
@@ -32,7 +32,9 @@ class OrderResponse(BaseModel):
     name: str
     type: str
     quantity: int
-    model_config = ConfigDict(from_attributes=True)
+    orderImageUrlList: List[str] = Field(default_factory=list, alias="order_image_url_list")
+    
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class AuthResponse(BaseModel):

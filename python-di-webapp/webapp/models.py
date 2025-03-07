@@ -1,6 +1,7 @@
 """Models module."""
 
 from sqlalchemy import Column, String, Boolean, Integer, DateTime
+from sqlalchemy.dialects.postgresql import ARRAY
 from datetime import datetime, timezone
 from .database import Base
 
@@ -15,6 +16,7 @@ class User(Base):
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
     role = Column(String, default="user")
+    profile_image_path = Column(String, nullable=True)
 
 
 class Order(Base):
@@ -24,3 +26,4 @@ class Order(Base):
     name = Column(String, nullable=False)
     type = Column(String, nullable=False)
     quantity = Column(String, nullable=False)
+    order_image_path_list = Column(ARRAY(String), nullable=True)

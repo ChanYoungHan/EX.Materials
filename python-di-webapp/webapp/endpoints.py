@@ -1,6 +1,6 @@
 """Endpoints module."""
 
-from fastapi import APIRouter, Depends, Response, status, HTTPException
+from fastapi import APIRouter, Depends, Response, status, UploadFile, File
 from dependency_injector.wiring import inject, Provide
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
@@ -80,6 +80,14 @@ def remove(
 ) -> Response:
     return user_service.delete_user_by_id(user_id)
 
+# 이미지 업로드 엔드포인트 (User 프로필 이미지)
+@user_router.post("/{user_id}/profile-image", response_model=UserResponse)
+def upload_profile_image(
+        user_id: int,
+        file: UploadFile = File(...),
+        user_service: UserService = Depends(get_user_service),
+):
+    return user_service.upload_profile_image(user_id, file)
 
 ########################################################
 # ORDER
@@ -102,4 +110,13 @@ def add_order(order_request: OrderRequest, order_service: OrderService = Depends
 @order_router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_order(order_id: int, order_service: OrderService = Depends(get_order_service)) -> Response:
     return order_service.delete_order_by_id(order_id)
+
+# 이미지 업로드 엔드포인트 (Order 이미지)
+@order_router.post("/{order_id}/order-image", response_model=OrderResponse)
+def upload_order_image(
+        order_id: int,
+        file: UploadFile = File(...),
+        order_service: OrderService = Depends(get_order_service),
+):
+    return order_service.upload_order_image(order_id, file)
 
