@@ -2,6 +2,7 @@
 
 from sqlalchemy import Column, String, Boolean, Integer, DateTime
 from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.ext.mutable import MutableList
 from datetime import datetime, timezone
 from .database import Base
 
@@ -26,4 +27,4 @@ class Order(Base):
     name = Column(String, nullable=False)
     type = Column(String, nullable=False)
     quantity = Column(String, nullable=False)
-    order_image_path_list = Column(ARRAY(String), nullable=True)
+    order_image_path_list = Column(MutableList.as_mutable(ARRAY(String)), nullable=True)

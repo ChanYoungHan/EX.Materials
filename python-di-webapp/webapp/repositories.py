@@ -103,6 +103,7 @@ class OrderRepository:
             if order.order_image_path_list is None:
                 order.order_image_path_list = []
             order.order_image_path_list.append(image_path)
+            logger.debug(f"order.order_image_path_list: {order.order_image_path_list}")
             session.commit()
             session.refresh(order)
             return order
