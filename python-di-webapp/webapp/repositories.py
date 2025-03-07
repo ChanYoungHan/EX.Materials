@@ -1,8 +1,7 @@
 """
 Repositories module.
-Repository returns should be schemas. Because it can't used after commit.
+DB 모델 필드 변경(이미지 URL -> 파일 경로)에 따라 수정되었습니다.
 """
-
 
 from contextlib import AbstractContextManager
 from typing import Callable, Iterator, BinaryIO, List
@@ -30,7 +29,7 @@ class UserRepository:
             if not user:
                 raise UserNotFoundError(user_id)
             return user
-    
+
     def get_by_email(self, email: str) -> User:
         with self.session_factory() as session:
             return session.query(User).filter(User.email == email).first()
@@ -52,6 +51,7 @@ class UserRepository:
             session.commit()
 
     def update_profile_image(self, user_id: int, image_path: str) -> User:
+        # DB에 S3 객체의 key(파일 경로)를 저장합니다.
         with self.session_factory() as session:
             user = session.query(User).filter(User.id == user_id).first()
             if not user:
@@ -60,7 +60,6 @@ class UserRepository:
             session.commit()
             session.refresh(user)
             return user
-
 
 class OrderRepository:
     def __init__(self, session_factory: Callable[..., AbstractContextManager[Session]]) -> None:
@@ -94,7 +93,10 @@ class OrderRepository:
             session.commit()
 
     def add_order_image_path(self, order_id: int, image_path: str) -> Order:
+        # Order의 이미지 경로 리스트에 S3의 파일 경로(object key)를 추가합니다.
+        from loguru import logger
         with self.session_factory() as session:
+            logger.debug(f"add_order_image_path: {order_id}, {image_path}")
             order = session.query(Order).filter(Order.id == order_id).first()
             if not order:
                 raise OrderNotFoundError(order_id)
@@ -106,6 +108,7 @@ class OrderRepository:
             return order
 
     def delete_order_image_path_list(self, order_id: int) -> Order:
+        # Order의 이미지 경로 리스트를 삭제합니다.
         with self.session_factory() as session:
             order = session.query(Order).filter(Order.id == order_id).first()
             if not order:
@@ -115,24 +118,17 @@ class OrderRepository:
             session.refresh(order)
             return order
 
-
 class NotFoundError(Exception):
-
     entity_name: str
 
     def __init__(self, entity_id):
         super().__init__(f"{self.entity_name} not found, id: {entity_id}")
 
-
 class UserNotFoundError(NotFoundError):
-
     entity_name: str = "User"
 
-
 class OrderNotFoundError(NotFoundError):
-
     entity_name: str = "Order"
-
 
 class MinioRepository:
     def __init__(self, minio_client: Minio, bucket_name: str = "socialing") -> None:

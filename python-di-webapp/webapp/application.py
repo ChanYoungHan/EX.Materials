@@ -2,6 +2,9 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import sys
+import logging
+from loguru import logger
 
 from .containers import Container
 from . import endpoints
