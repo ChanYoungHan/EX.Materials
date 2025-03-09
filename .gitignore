@@ -170,3 +170,4 @@ poetry.lock
 
 # output sub-directory
 dsmc/convert_out
+*/config.*
