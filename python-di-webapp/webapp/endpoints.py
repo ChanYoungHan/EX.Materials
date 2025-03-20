@@ -1,5 +1,7 @@
 """Endpoints module."""
 
+import asyncio
+import time
 from fastapi import APIRouter, Depends, Response, status, UploadFile, File
 from dependency_injector.wiring import inject, Provide
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -32,6 +34,7 @@ def current_user_dependency(token: str = Depends(oauth2_scheme), auth_service: A
 def admin_dependency(current_user = Depends(current_user_dependency), auth_service: AuthService = Depends(get_auth_service)):
     return auth_service.require_admin(current_user)
 
+test_router = APIRouter(prefix="/test", tags=["test"])
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 user_router = APIRouter(prefix="/users", tags=["users"], dependencies=[Depends(admin_dependency)])
 order_router = APIRouter(prefix="/orders", tags=["orders"], dependencies=[Depends(admin_dependency)])
@@ -88,6 +91,21 @@ def upload_profile_image(
         user_service: UserService = Depends(get_user_service),
 ):
     return user_service.upload_profile_image(user_id, file)
+
+########################################################
+# TEST
+########################################################
+# Async wait 테스트용 엔드포인트
+@test_router.get("/async-wait")
+async def async_wait():
+    await asyncio.sleep(10)
+    return {"message": "Hello, World!"}
+
+# Async 테스트용 대조 엔드포인트 : wait
+@test_router.get("/sync-wait")
+def sync_wait():
+    time.sleep(10)
+    return {"message": "Hello, World!"}
 
 ########################################################
 # ORDER
