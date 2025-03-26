@@ -5,6 +5,7 @@ from .database import Database
 from .repositories import UserRepository, OrderRepository, MinioRepository
 from .services import UserService, OrderService, AuthService
 from minio import Minio
+from .logger_config import configure_logger
 
 def init_minio_client(endpoint: str, access_key: str, secret_key: str, secure: bool) -> Minio:
     return Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)

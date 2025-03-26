@@ -95,17 +95,25 @@ def upload_profile_image(
 ########################################################
 # TEST
 ########################################################
-# Async wait 테스트용 엔드포인트
+'''
+Remove if this templates work on production
+'''
+# IO 집약적 엔드포인트(이벤트 루프 사용)
 @test_router.get("/async-wait")
 async def async_wait():
-    await asyncio.sleep(10)
+    await asyncio.sleep(5)
     return {"message": "Hello, World!"}
 
-# Async 테스트용 대조 엔드포인트 : wait
+# IO 집약적 엔드포인트(쓰레드 풀 사용)
 @test_router.get("/sync-wait")
 def sync_wait():
-    time.sleep(10)
+    time.sleep(5)
     return {"message": "Hello, World!"}
+
+# CPU 집약적 엔드포인트(쓰레드 풀 사용)
+@test_router.get("/cpu-bound")
+def cpu_bound():
+    return sum(i*i for i in range(10**7))
 
 ########################################################
 # ORDER

@@ -2,17 +2,16 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import sys
-import logging
-from loguru import logger
 
 from .containers import Container
 from . import endpoints
-
+from .logger_config import configure_logger
 
 def create_app() -> FastAPI:
     container = Container()
     container.init_resources()
+
+    configure_logger()
 
     app = FastAPI()
 
@@ -25,7 +24,7 @@ def create_app() -> FastAPI:
     )
 
     app.container = container
-    app.include_router(endpoints.test_router)
+    app.include_router(endpoints.test_router) #TODELETE : 테스트용 엔드포인트
     app.include_router(endpoints.user_router)
     app.include_router(endpoints.order_router)
     app.include_router(endpoints.auth_router)
