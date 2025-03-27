@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .containers import Container
 from . import endpoints
 from .logger_config import configure_logger
+from .graphql.schema import graphql_app
 
 def create_app() -> FastAPI:
     container = Container()
@@ -28,6 +29,8 @@ def create_app() -> FastAPI:
     app.include_router(endpoints.user_router)
     app.include_router(endpoints.order_router)
     app.include_router(endpoints.auth_router)
+    app.include_router(graphql_app, prefix="/graphql")
+
 
     @app.get("/status")
     def get_status():

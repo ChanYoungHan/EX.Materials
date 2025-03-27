@@ -1,7 +1,4 @@
-"""
-Repositories module.
-DB 모델 필드 변경(이미지 URL -> 파일 경로)에 따라 수정되었습니다.
-"""
+import asyncio
 
 from contextlib import AbstractContextManager
 from typing import Callable, Iterator, BinaryIO, List
