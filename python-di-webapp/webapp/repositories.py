@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from minio import Minio
 from minio.error import S3Error
 
-from .models import User, Order
+from .models import User, Order, Image
 from .schemas import OrderRequest
 
 class UserRepository:
@@ -47,13 +47,13 @@ class UserRepository:
             session.delete(entity)
             session.commit()
 
-    def update_profile_image(self, user_id: int, image_path: str) -> User:
-        # DB에 S3 객체의 key(파일 경로)를 저장합니다.
+    def update_profile_image(self, user_id: int, image_id: int) -> User:
+        # DB에 Image 테이블의 id(이미지 레코드)를 저장합니다.
         with self.session_factory() as session:
             user = session.query(User).filter(User.id == user_id).first()
             if not user:
                 raise UserNotFoundError(user_id)
-            user.profile_image_path = image_path
+            user.profile_image = image_id
             session.commit()
             session.refresh(user)
             return user
@@ -89,29 +89,26 @@ class OrderRepository:
             session.delete(entity)
             session.commit()
 
-    def add_order_image_path(self, order_id: int, image_path: str) -> Order:
-        # Order의 이미지 경로 리스트에 S3의 파일 경로(object key)를 추가합니다.
-        from loguru import logger
+    def add_order_image(self, order_id: int, image_id: int) -> Order:
+        # Order의 이미지 id 리스트에 새 이미지의 id를 추가합니다.
         with self.session_factory() as session:
-            logger.debug(f"add_order_image_path: {order_id}, {image_path}")
             order = session.query(Order).filter(Order.id == order_id).first()
             if not order:
                 raise OrderNotFoundError(order_id)
-            if order.order_image_path_list is None:
-                order.order_image_path_list = []
-            order.order_image_path_list.append(image_path)
-            logger.debug(f"order.order_image_path_list: {order.order_image_path_list}")
+            if order.order_image_list is None:
+                order.order_image_list = []
+            order.order_image_list.append(image_id)
             session.commit()
             session.refresh(order)
             return order
 
-    def delete_order_image_path_list(self, order_id: int) -> Order:
-        # Order의 이미지 경로 리스트를 삭제합니다.
+    def delete_order_image_list(self, order_id: int) -> Order:
+        # Order의 이미지 id 리스트를 삭제합니다.
         with self.session_factory() as session:
             order = session.query(Order).filter(Order.id == order_id).first()
             if not order:
                 raise OrderNotFoundError(order_id)
-            order.order_image_path_list = []
+            order.order_image_list = []
             session.commit()
             session.refresh(order)
             return order
@@ -173,3 +170,19 @@ class MinioRepository:
             self.client.remove_object(self.bucket_name, object_key)
         except S3Error as e:
             raise ValueError(f"Failed to delete file: {str(e)}")
+
+class ImageRepository:
+    def __init__(self, session_factory: Callable[..., AbstractContextManager[Session]]) -> None:
+        self.session_factory = session_factory
+
+    def add_image(self, bucket: str, path: str) -> Image:
+        with self.session_factory() as session:
+            image = Image(bucket=bucket, path=path)
+            session.add(image)
+            session.commit()
+            session.refresh(image)
+            return image
+
+    def get_image_by_id(self, image_id: int) -> Image:
+        with self.session_factory() as session:
+            return session.query(Image).filter(Image.id == image_id).first()

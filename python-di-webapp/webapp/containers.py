@@ -2,7 +2,7 @@
 
 from dependency_injector import containers, providers
 from .database import Database
-from .repositories import UserRepository, OrderRepository, MinioRepository
+from .repositories import UserRepository, OrderRepository, MinioRepository, ImageRepository
 from .services import UserService, OrderService, AuthService
 from minio import Minio
 from .logger_config import configure_logger
@@ -29,6 +29,12 @@ class Container(containers.DeclarativeContainer):
         session_factory=db.provided.session,
     )
 
+    # ImageRepository 제공자 추가
+    image_repository = providers.Factory(
+        ImageRepository,
+        session_factory=db.provided.session,
+    )
+
     # MinIO 클라이언트를 Resource로 생성하여 MinioRepository에 전달
     minio_client = providers.Resource(
         init_minio_client,
@@ -48,13 +54,15 @@ class Container(containers.DeclarativeContainer):
         UserService,
         user_repository=user_repository,
         minio_repository=minio_repository,
+        image_repository=image_repository,
     )
 
-    # OrderService에도 minio_repository 의존성을 추가
+    # OrderService에도 image_repository 의존성을 추가
     order_service = providers.Factory(
         OrderService,
         order_repository=order_repository,
         minio_repository=minio_repository,
+        image_repository=image_repository,
     )
 
     auth_service = providers.Factory(

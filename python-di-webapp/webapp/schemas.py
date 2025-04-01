@@ -1,6 +1,13 @@
 # schemas.py
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from typing import List, Union
+from typing import List, Union, Optional
+
+
+class ImageResponse(BaseModel):
+    id: int
+    url: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserRequest(BaseModel):
@@ -17,7 +24,8 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
     is_active: bool = True
-    profileImageUrl: Union[str, None] = Field(default=None, alias="profile_image_url")
+    # profileImage는 ImageResponse 객체 (단일 이미지)로 반환
+    profileImage: Optional[ImageResponse] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -27,13 +35,15 @@ class OrderRequest(BaseModel):
     type: str
     quantity: int
 
+
 class OrderResponse(BaseModel):
     id: int
     name: str
     type: str
     quantity: int
-    orderImageUrlList: List[str] = Field(default_factory=list, alias="order_image_url_list")
-    
+    # orderImageList는 ImageResponse 객체들의 리스트로 반환
+    orderImageList: List[ImageResponse] = Field(default_factory=list)
+
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 

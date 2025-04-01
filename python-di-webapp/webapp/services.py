@@ -6,7 +6,15 @@ from datetime import timedelta
 import uuid
 from loguru import logger
 
-from .repositories import UserRepository, NotFoundError, OrderRepository, MinioRepository
+from .repositories import (
+    UserRepository,
+    NotFoundError,
+    OrderRepository,
+    MinioRepository,
+    ImageRepository,
+    UserNotFoundError,
+    OrderNotFoundError
+)
 from .schemas import UserResponse, OrderResponse, OrderRequest, AuthResponse
 from .security import verify_password, get_password_hash, decode_access_token, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from .utils import PathHelper, TableType
@@ -28,21 +36,33 @@ class PresignedUrlResolverMixin:
 
 class UserService(PresignedUrlResolverMixin):
 
-    def __init__(self, user_repository: UserRepository, minio_repository: MinioRepository) -> None:
+    def __init__(self, user_repository: UserRepository, minio_repository: MinioRepository, image_repository: ImageRepository) -> None:
         self._repository: UserRepository = user_repository
         self.minio_repository = minio_repository
+        self.image_repository = image_repository
+
+    def _resolve_user_image(self, user):
+        if getattr(user, "profile_image", None):
+            img = self.image_repository.get_image_by_id(user.profile_image)
+            if img:
+                url = self.minio_repository.get_presigned_url(img.path)
+                setattr(user, "profileImage", {"id": img.id, "url": url})
+            else:
+                setattr(user, "profileImage", None)
+        else:
+            setattr(user, "profileImage", None)
 
     def get_users(self) -> list[UserResponse]:
         users = self._repository.get_all()
         for user in users:
-            self._resolve_single_presigned_url(user, 'profile_image_path', 'profile_image_url')
+            self._resolve_user_image(user)
         return [UserResponse.model_validate(user) for user in users]
 
     def get_user_by_id(self, user_id: int) -> UserResponse | Response:
         try:
             user = self._repository.get_by_id(user_id)
             if user:
-                self._resolve_single_presigned_url(user, 'profile_image_path', 'profile_image_url')
+                self._resolve_user_image(user)
                 return UserResponse.model_validate(user)
             else:
                 return Response(status_code=status.HTTP_404_NOT_FOUND)
@@ -52,7 +72,7 @@ class UserService(PresignedUrlResolverMixin):
     def get_user_by_email(self, email: str):
         user = self._repository.get_by_email(email)
         if user:
-            self._resolve_single_presigned_url(user, 'profile_image_path', 'profile_image_url')
+            self._resolve_user_image(user)
         return user
 
     def create_user(self) -> UserResponse:
@@ -72,8 +92,8 @@ class UserService(PresignedUrlResolverMixin):
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
     def upload_profile_image(self, user_id: int, file: UploadFile):
-        image_id = uuid.uuid4().hex
-        file_path = PathHelper.generate_user_profile_path(user_id, image_id, file.filename)
+        image_uuid = uuid.uuid4().hex
+        file_path = PathHelper.generate_user_profile_path(user_id, image_uuid, file.filename)
         
         file_data = file.file
         file_data.seek(0, 2)
@@ -82,27 +102,41 @@ class UserService(PresignedUrlResolverMixin):
         content_type = file.content_type
 
         object_key = self.minio_repository.upload_file(file_data, file_size, content_type, file_path)
-        updated_user = self._repository.update_profile_image(user_id, object_key)
-        self._resolve_single_presigned_url(updated_user, 'profile_image_path', 'profile_image_url')
+        # 새 이미지 레코드 생성 (bucket 정보는 minio_repository.bucket_name 사용)
+        new_image = self.image_repository.add_image(self.minio_repository.bucket_name, object_key)
+        # 유저의 프로필 이미지 업데이트 (Image의 id 저장)
+        updated_user = self._repository.update_profile_image(user_id, new_image.id)
+        self._resolve_user_image(updated_user)
         return UserResponse.model_validate(updated_user)
 
 
 class OrderService(PresignedUrlResolverMixin):
-    def __init__(self, order_repository: OrderRepository, minio_repository: MinioRepository) -> None:
+    def __init__(self, order_repository: OrderRepository, minio_repository: MinioRepository, image_repository: ImageRepository) -> None:
         self._repository: OrderRepository = order_repository
         self.minio_repository = minio_repository
+        self.image_repository = image_repository
+
+    def _resolve_order_images(self, order):
+        images = []
+        if order.order_image_list:
+            for image_id in order.order_image_list:
+                img = self.image_repository.get_image_by_id(image_id)
+                if img:
+                    url = self.minio_repository.get_presigned_url(img.path)
+                    images.append({"id": img.id, "url": url})
+        setattr(order, "orderImageList", images)
 
     def get_orders(self) -> list[OrderResponse]:
         orders = self._repository.get_all()
         for order in orders:
-            self._resolve_list_presigned_urls(order, 'order_image_path_list', 'order_image_url_list')
+            self._resolve_order_images(order)
         return [OrderResponse.model_validate(order) for order in orders]
 
     def get_order_by_id(self, order_id: int) -> OrderResponse | Response:
         try:
             order = self._repository.get_by_id(order_id)
             if order:
-                self._resolve_list_presigned_urls(order, 'order_image_path_list', 'order_image_url_list')
+                self._resolve_order_images(order)
                 return OrderResponse.model_validate(order)
             else:
                 return Response(status_code=status.HTTP_404_NOT_FOUND)
@@ -121,8 +155,8 @@ class OrderService(PresignedUrlResolverMixin):
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
     def upload_order_image(self, order_id: int, file: UploadFile):
-        image_id = uuid.uuid4().hex
-        file_path = PathHelper.generate_order_image_path(order_id, image_id, file.filename)
+        image_uuid = uuid.uuid4().hex
+        file_path = PathHelper.generate_order_image_path(order_id, image_uuid, file.filename)
         
         file_data = file.file
         file_data.seek(0, 2)
@@ -131,24 +165,30 @@ class OrderService(PresignedUrlResolverMixin):
         content_type = file.content_type
 
         object_key = self.minio_repository.upload_file(file_data, file_size, content_type, file_path)
-        updated_order = self._repository.add_order_image_path(order_id, object_key)
-        self._resolve_list_presigned_urls(updated_order, 'order_image_path_list', 'order_image_url_list')
+        # 새 이미지 레코드 생성
+        new_image = self.image_repository.add_image(self.minio_repository.bucket_name, object_key)
+        # Order의 이미지 id 리스트에 추가
+        updated_order = self._repository.add_order_image(order_id, new_image.id)
+        self._resolve_order_images(updated_order)
         return OrderResponse.model_validate(updated_order)
 
-    def delete_order_image_path_list(self, order_id: int) -> OrderResponse:
-        # 기존 이미지 경로 목록 가져오기
+    def delete_order_image_list(self, order_id: int) -> OrderResponse:
+        # 기존 이미지 id 목록 가져오기
         order = self._repository.get_by_id(order_id)
-        image_paths = order.order_image_path_list or []
+        image_ids = order.order_image_list or []
         
-        # S3에서 이미지 파일들 삭제
-        for image_path in image_paths:
-            try:
-                self.minio_repository.delete_file(image_path)
-            except ValueError as e:
-                logger.error(f"Failed to delete file {image_path}: {str(e)}")
-                
-        # DB에서 이미지 경로 목록 삭제
-        updated_order = self._repository.delete_order_image_path_list(order_id)
+        # S3에서 이미지 파일 삭제
+        for image_id in image_ids:
+            img = self.image_repository.get_image_by_id(image_id)
+            if img:
+                try:
+                    self.minio_repository.delete_file(img.path)
+                except ValueError as e:
+                    logger.error(f"Failed to delete file {img.path}: {str(e)}")
+        
+        # DB에서 이미지 id 리스트 삭제
+        updated_order = self._repository.delete_order_image_list(order_id)
+        self._resolve_order_images(updated_order)
         return OrderResponse.model_validate(updated_order)
 
 
