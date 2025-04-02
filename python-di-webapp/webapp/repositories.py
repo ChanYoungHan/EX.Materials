@@ -1,7 +1,7 @@
 import asyncio
 
 from contextlib import AbstractContextManager
-from typing import Callable, Iterator, BinaryIO, List
+from typing import Callable, Iterator, BinaryIO, List, Optional
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -109,6 +109,25 @@ class OrderRepository:
             if not order:
                 raise OrderNotFoundError(order_id)
             order.order_image_list = []
+            session.commit()
+            session.refresh(order)
+            return order
+
+    def delete_order_image(self, order_id: int, image_id: int) -> Order:
+        with self.session_factory() as session:
+            order = session.query(Order).filter(Order.id == order_id).first()
+            if not order:
+                raise OrderNotFoundError(order_id)
+            # 특정 이미지가 Order에 속해있는지 확인 후 삭제
+            image = session.query(Image).filter(
+                Image.id == image_id,
+                Image.order_id == order_id  # 연관관계를 통해 확인
+            ).first()
+            if image:
+                session.delete(image)
+            # 이미지 FK가 이미 Order의 이미지 리스트에 등록되어 있으면 제거
+            if order.order_image_list and image_id in order.order_image_list:
+                order.order_image_list.remove(image_id)
             session.commit()
             session.refresh(order)
             return order

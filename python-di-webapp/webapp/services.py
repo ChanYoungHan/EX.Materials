@@ -147,12 +147,37 @@ class OrderService(PresignedUrlResolverMixin):
         order = self._repository.add(order_request)
         return OrderResponse.model_validate(order)
 
-    def delete_order_by_id(self, order_id: int) -> Response:
+    def delete_order_image(self, order_id: int, image_id: int = None):
+        """
+        이미지 삭제 시, image_id가 제공되면 해당 이미지만 삭제하고,
+        image_id가 없으면 기존의 전체 이미지 삭제(순차 삭제) 함수를 사용합니다.
+        """
         try:
-            self._repository.delete_by_id(order_id)
-            return Response(status_code=status.HTTP_204_NO_CONTENT)
-        except NotFoundError:
+            order = self._repository.get_by_id(order_id)
+        except OrderNotFoundError:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
+
+        if image_id is not None:
+            # 단일 이미지 삭제: S3에서 파일 삭제 후 DB 연관관계에서 해당 이미지 제거
+            img = self.image_repository.get_image_by_id(image_id)
+            if img:
+                try:
+                    self.minio_repository.delete_file(img.path)
+                except Exception as e:
+                    logger.error(f"Failed to delete file {img.path}: {e}")
+            updated_order = self._repository.delete_order_image(order_id, image_id)
+        else:
+            # image_id 미제공 시 전체 이미지 삭제 방식 사용
+            for image_id in order.order_image_list or []:
+                img = self.image_repository.get_image_by_id(image_id)
+                if img:
+                    try:
+                        self.minio_repository.delete_file(img.path)
+                    except Exception as e:
+                        logger.error(f"Failed to delete file {img.path}: {e}")
+            updated_order = self._repository.delete_order_image_list(order_id)
+        self._resolve_order_images(updated_order)
+        return OrderResponse.model_validate(updated_order)
 
     def upload_order_image(self, order_id: int, file: UploadFile):
         image_uuid = uuid.uuid4().hex
@@ -172,28 +197,9 @@ class OrderService(PresignedUrlResolverMixin):
         self._resolve_order_images(updated_order)
         return OrderResponse.model_validate(updated_order)
 
-    def delete_order_image_list(self, order_id: int) -> OrderResponse:
-        # 기존 이미지 id 목록 가져오기
-        order = self._repository.get_by_id(order_id)
-        image_ids = order.order_image_list or []
-        
-        # S3에서 이미지 파일 삭제
-        for image_id in image_ids:
-            img = self.image_repository.get_image_by_id(image_id)
-            if img:
-                try:
-                    self.minio_repository.delete_file(img.path)
-                except ValueError as e:
-                    logger.error(f"Failed to delete file {img.path}: {str(e)}")
-        
-        # DB에서 이미지 id 리스트 삭제
-        updated_order = self._repository.delete_order_image_list(order_id)
-        self._resolve_order_images(updated_order)
-        return OrderResponse.model_validate(updated_order)
-
 
 class AuthService:
-    def __init__(self, user_repository) -> None:
+    def __init__(self, user_repository: UserRepository) -> None:
         self._user_repository = user_repository
 
     def signup(self, user_req) -> dict:

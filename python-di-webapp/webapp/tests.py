@@ -17,15 +17,6 @@ from webapp.utils import PathHelper
 def client():
     yield TestClient(app)
 
-# 관리자 인증 헤더를 생성하는 픽스처 (관리자 권한 필요)
-@pytest.fixture
-def admin_auth_header():
-    token = create_access_token(
-        data={"sub": "admin@example.com", "role": "admin"},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    return {"Authorization": f"Bearer {token}"}
-
 # 관리자 유저 픽스처 (테스트 내 관리자 존재 여부를 위해 사용)
 @pytest.fixture
 def admin_user():
@@ -36,6 +27,21 @@ def admin_user():
         is_active=True,
         role="admin"
     )
+
+# 인증/인가를 위한 Fixture로 admin_user와 토큰 생성 및 user_repository override 통합
+@pytest.fixture
+def admin_auth_header(admin_user):
+    token = create_access_token(
+        data={"sub": admin_user.email, "role": admin_user.role},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    header = {"Authorization": f"Bearer {token}"}
+    # auth_service에서 get_by_email 호출 시 항상 admin_user가 반환되도록 override
+    user_repo_mock = mock.Mock(spec=UserRepository)
+    user_repo_mock.get_by_email.return_value = admin_user
+    app.container.user_repository.override(user_repo_mock)
+    yield header
+    app.container.user_repository.reset_override()
 
 # /status 엔드포인트 (인증 없이 접근 가능)
 def test_status(client):
@@ -292,3 +298,94 @@ def test_upload_order_image_returns_order_with_image_list(mock_uuid4, client, ad
         assert "orderImageList" in data
         expected_order_images = [{"id": 300, "url": expected_url}]
         assert data["orderImageList"] == expected_order_images
+
+########################################################
+# ORDER 플로우 테스트
+########################################################
+
+# ① 오더 생성 테스트
+def test_create_order(client, admin_auth_header):
+    # 가짜 오더 객체 생성 (quantity는 모델에서는 문자열이지만, 스키마에서는 int로 변환)
+    fake_order = Order(
+        id=100,
+        name="Test Order",
+        type="dummy",
+        quantity="1"
+    )
+    fake_order.order_image_list = []
+
+    order_repo_mock = mock.Mock()
+    order_repo_mock.add.return_value = fake_order
+    order_repo_mock.get_by_id.return_value = fake_order
+
+    with app.container.order_repository.override(order_repo_mock):
+        response = client.post(
+            "/orders",
+            json={"name": "Test Order", "type": "dummy", "quantity": 1},
+            headers=admin_auth_header
+        )
+    assert response.status_code == 201
+    expected = {
+        "id": 100,
+        "name": "Test Order",
+        "type": "dummy",
+        "quantity": 1,
+        "orderImageList": []
+    }
+    assert response.json() == expected
+
+# ② 선택한 오더 이미지 삭제 테스트
+def test_delete_selected_order_image(client, admin_auth_header):
+    order_id = 100
+    # 초기 오더: 두 개의 이미지 [300, 301]가 있다고 가정
+    initial_order = Order(
+        id=order_id,
+        name="Test Order",
+        type="dummy",
+        quantity="1"
+    )
+    initial_order.order_image_list = [300, 301]
+
+    # 삭제 후 업데이트된 오더: 이미지 300이 제거되어 [301]만 남음
+    updated_order = Order(
+        id=order_id,
+        name="Test Order",
+        type="dummy",
+        quantity="1"
+    )
+    updated_order.order_image_list = [301]
+
+    # 가짜 이미지 객체 (이미지 301에 대한 정보)
+    class FakeImage(Image):
+        pass
+    fake_image = FakeImage()
+    fake_image.id = 301
+    fake_image.path = f"orders/{order_id}/301_sample.png"
+    expected_url = f"https://minio.example.com/{fake_image.path}"
+
+    order_repo_mock = mock.Mock()
+    order_repo_mock.get_by_id.return_value = initial_order
+    order_repo_mock.delete_order_image.return_value = updated_order
+
+    image_repo_mock = mock.Mock()
+    image_repo_mock.get_image_by_id.return_value = fake_image
+
+    minio_repo_mock = mock.Mock()
+    minio_repo_mock.get_presigned_url.return_value = expected_url
+
+    with app.container.order_repository.override(order_repo_mock), \
+         app.container.image_repository.override(image_repo_mock), \
+         app.container.minio_repository.override(minio_repo_mock):
+        response = client.delete(f"/orders/{order_id}/order-image/300", headers=admin_auth_header)
+
+    assert response.status_code == 200
+    data = response.json()
+    expected_order_images = [{"id": 301, "url": expected_url}]
+    expected_response = {
+        "id": order_id,
+        "name": "Test Order",
+        "type": "dummy",
+        "quantity": 1,
+        "orderImageList": expected_order_images
+    }
+    assert data == expected_response

@@ -135,7 +135,15 @@ def add_order(order_request: OrderRequest, order_service: OrderService = Depends
 
 @order_router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_order(order_id: int, order_service: OrderService = Depends(get_order_service)) -> Response:
-    return order_service.delete_order_by_id(order_id)
+    return order_service.delete_order_image(order_id)
+
+@order_router.delete("/{order_id}/order-image/{image_id}", response_model=OrderResponse)
+def delete_selected_order_image(
+    order_id: int,
+    image_id: int,
+    order_service: OrderService = Depends(get_order_service)
+) -> OrderResponse | Response:
+    return order_service.delete_order_image(order_id, image_id)
 
 # 이미지 업로드 엔드포인트 (Order 이미지)
 @order_router.post("/{order_id}/order-image", response_model=OrderResponse)
