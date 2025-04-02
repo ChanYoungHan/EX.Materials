@@ -4,11 +4,13 @@ from datetime import timedelta
 from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
+import io
 
 from webapp.application import app
-from webapp.models import User
+from webapp.models import User, Image, Order
 from webapp.repositories import UserRepository, UserNotFoundError
 from webapp.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, get_password_hash
+from webapp.utils import PathHelper
 
 # 기본 클라이언트 픽스처
 @pytest.fixture
@@ -192,3 +194,101 @@ def test_remove_404(client, admin_auth_header, admin_user):
     with app.container.user_repository.override(repository_mock):
         response = client.delete("/users/1", headers=admin_auth_header)
     assert response.status_code == 404
+
+def test_get_user_with_profile_image(client, admin_auth_header, admin_user):
+    """
+    테스트 시나리오: GET /users/{id} 호출 시 사용자의 프로필 이미지가 단일 객체로
+    {id, url} 형식으로 반환되는지 확인.
+    """
+    # 사용자에 프로필 이미지 설정: profile_image 필드에 이미지 ID 101 할당
+    admin_user.profile_image = 101
+    sample_filename = "sample.png"
+    # 기존에 구현된 PathHelper 함수를 사용하여 예상 파일 경로 계산
+    expected_file_path = PathHelper.generate_user_profile_path(admin_user.id, 101, sample_filename)
+    expected_url = "https://minio.example.com/" + expected_file_path
+
+    repository_mock = mock.Mock(spec=UserRepository)
+    repository_mock.get_by_id.return_value = admin_user
+    repository_mock.get_by_email.return_value = admin_user
+
+    # 실제 Image 모델을 사용하여 가짜 이미지 객체 생성 (bucket 정보 포함)
+    fake_image = Image(id=101, bucket="minio-bucket", path=expected_file_path)
+
+    image_repo_mock = mock.Mock()
+    image_repo_mock.get_image_by_id.return_value = fake_image
+
+    minio_repo_mock = mock.Mock()
+    minio_repo_mock.get_presigned_url.return_value = expected_url
+
+    with app.container.user_repository.override(repository_mock), \
+         app.container.image_repository.override(image_repo_mock), \
+         app.container.minio_repository.override(minio_repo_mock):
+        response = client.get(f"/users/{admin_user.id}", headers=admin_auth_header)
+        assert response.status_code == 200
+        data = response.json()
+        # profileImage 필드가 올바르게 {id, url} 형태로 반환되는지 검증
+        assert "profileImage" in data
+        assert data["profileImage"] == {"id": 101, "url": expected_url}
+
+@mock.patch("webapp.services.uuid.uuid4")
+def test_upload_order_image_returns_order_with_image_list(mock_uuid4, client, admin_auth_header, admin_user):
+    """
+    테스트 시나리오: POST /orders/{order_id}/order-image 호출 시 업로드된 이미지가 Order에 추가되어
+    반환되는 OrderResponse 내의 orderImages 필드가 복수 개체(리스트)로 반환되고,
+    각 이미지 객체가 {id, url} 형태로 되어 있는지 확인.
+    """
+    # 고정된 uuid 생성 (패치된 uuid.uuid4()가 반환)
+    fake_uuid = type("FakeUUID", (), {"hex": "fixeduuid"})()
+    mock_uuid4.return_value = fake_uuid
+
+    order_id = 100
+    sample_filename = "sample.png"
+    # 기존 PathHelper 함수를 사용하여 예상 파일 경로 계산
+    expected_file_path = PathHelper.generate_order_image_path(order_id, "fixeduuid", sample_filename)
+    expected_url = "https://minio.example.com/" + expected_file_path
+
+    # 실제 Order 객체를 생성하여 order_image_list에 이미지 ID 300 추가
+    order_obj = Order(
+        id=order_id,
+        name="Test Order",
+        type="dummy",
+        quantity="1"
+    )
+    order_obj.order_image_list = [300]
+    # 테스트 시 response에서 변환된 값을 나타내기 위해 orderImages 속성을 추가(실제 구현에서는 서비스에서 수행)
+    order_obj.orderImages = [{"id": 300, "url": expected_url}]
+
+    order_repo_mock = mock.Mock()
+    order_repo_mock.add_order_image.return_value = order_obj
+
+    # 실제 Image 모델을 사용하여 가짜 이미지 객체 생성 (bucket 정보 포함)
+    fake_image = Image(id=300, bucket="minio-bucket", path=expected_file_path)
+
+    image_repo_mock = mock.Mock()
+    image_repo_mock.add_image.return_value = fake_image
+    image_repo_mock.get_image_by_id.return_value = fake_image
+
+    minio_repo_mock = mock.Mock()
+    # upload_file 메서드 호출 시 임의의 오브젝트 키 반환 (사용되지 않음)
+    minio_repo_mock.upload_file.return_value = "object_key_123"
+    minio_repo_mock.get_presigned_url.return_value = expected_url
+
+    user_repo_mock = mock.Mock()
+    # 인증용: admin_user 반환
+    user_repo_mock.get_by_email.return_value = admin_user
+
+    with app.container.order_repository.override(order_repo_mock), \
+         app.container.image_repository.override(image_repo_mock), \
+         app.container.minio_repository.override(minio_repo_mock), \
+         app.container.user_repository.override(user_repo_mock):
+        file_content = b"dummy image data"
+        files = {
+            "file": ("sample.png", io.BytesIO(file_content), "image/png")
+        }
+        response = client.post(f"/orders/{order_id}/order-image", headers=admin_auth_header, files=files)
+        assert response.status_code == 200
+        data = response.json()
+        # orderImages 필드가 존재하며, 리스트 내의 각 이미지가 {id, url} 형태인지 확인
+        assert "orderImageList" in data
+        expected_order_images = [{"id": 300, "url": expected_url}]
+        assert data["orderImageList"] == expected_order_images
