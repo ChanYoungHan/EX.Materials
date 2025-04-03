@@ -1,15 +1,17 @@
 FastAPI + SQLAlchemy + Dependency Injector Example
 ==================================================
 
-PatchNote
+ResearchNote
 ---------
 
 - 2025-02-18 : Alembic 마이그레이션 추가
    참고 : `LinkToBlog <https://imaginemaker.notion.site/Alembic-19c865424aed8099bcc9d29bf3f0d760?pvs=4>`_
-- 2025-03-15 : Async 도입
+- 2025-03-15 : Async 리서치
    참고 : `LinkToBlog <https://imaginemaker.notion.site/Async-DI-python-19a865424aed807a9dc7c9a12f28f990?pvs=4>`_
 - 2025-03-29 : GraphQL 도입
    참고 : `LinkToBlog <https://imaginemaker.notion.site/GraphQL-1c2865424aed80419f78d3f6d7ad0694?pvs=4>`_
+- 2025-04-02 : 이미지 `backref` 연관 관계 추가
+   참고 : `LinkToBlog <https://imaginemaker.notion.site/DI-template-ImageRouter-192865424aed809f974cf53516d31641?pvs=4>`_
 
 This is a `FastAPI <https://fastapi.tiangolo.com/>`_ +
 `SQLAlchemy <https://www.sqlalchemy.org/>`_ +
