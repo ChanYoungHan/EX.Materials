@@ -355,23 +355,37 @@ def test_delete_selected_order_image(client, admin_auth_header):
     )
     updated_order.order_image_list = [301]
 
-    # 가짜 이미지 객체 (이미지 301에 대한 정보)
-    class FakeImage(Image):
-        pass
-    fake_image = FakeImage()
-    fake_image.id = 301
-    fake_image.path = f"orders/{order_id}/301_sample.png"
-    expected_url = f"https://minio.example.com/{fake_image.path}"
+    # image_id 300 (삭제 대상)와 301 (남은 이미지)에 대해 실제 Image 객체를 상속한 Mock 객체 생성
+    mock_image_deletion = mock.Mock(spec=Image)
+    mock_image_deletion.id = 300
+    mock_image_deletion.order_id = order_id
+    mock_image_deletion.path = f"orders/{order_id}/300_sample.png"
+
+    mock_image_remaining = mock.Mock(spec=Image)
+    mock_image_remaining.id = 301
+    mock_image_remaining.order_id = order_id
+    mock_image_remaining.path = f"orders/{order_id}/301_sample.png"
+
+    # 남은 이미지의 presigned URL 예상 값
+    expected_url = f"https://minio.example.com/orders/{order_id}/301_sample.png"
 
     order_repo_mock = mock.Mock()
     order_repo_mock.get_by_id.return_value = initial_order
-    order_repo_mock.delete_order_image.return_value = updated_order
+    order_repo_mock.delete_order_image_by_id.return_value = updated_order
 
     image_repo_mock = mock.Mock()
-    image_repo_mock.get_image_by_id.return_value = fake_image
+    # image_id에 따라 올바른 Mock Image 객체를 반환하는 side_effect 설정
+    def get_image_by_id_side_effect(image_id):
+        if image_id == 300:
+            return mock_image_deletion
+        elif image_id == 301:
+            return mock_image_remaining
+        return None
+    image_repo_mock.get_image_by_id.side_effect = get_image_by_id_side_effect
 
     minio_repo_mock = mock.Mock()
-    minio_repo_mock.get_presigned_url.return_value = expected_url
+    # 파일 경로에 따라 URL을 생성하도록 설정합니다.
+    minio_repo_mock.get_presigned_url.side_effect = lambda path: f"https://minio.example.com/{path}"
 
     with app.container.order_repository.override(order_repo_mock), \
          app.container.image_repository.override(image_repo_mock), \

@@ -102,32 +102,37 @@ class OrderRepository:
             session.refresh(order)
             return order
 
-    def delete_order_image_list(self, order_id: int) -> Order:
-        # Order의 이미지 id 리스트를 삭제합니다.
+    def delete_order_image_by_id(self, order_id: int, image_id: int) -> Order:
+        """
+        단일 이미지 삭제: DB에서 해당 Image row를 삭제하고,
+        Order의 order_image_list에서도 image_id를 제거합니다.
+        """
         with self.session_factory() as session:
             order = session.query(Order).filter(Order.id == order_id).first()
             if not order:
                 raise OrderNotFoundError(order_id)
-            order.order_image_list = []
+            image = session.query(Image).filter(
+                Image.id == image_id,
+                Image.order_id == order_id
+            ).first()
+            if image:
+                session.delete(image)
+            if order.order_image_list and image_id in order.order_image_list:
+                order.order_image_list.remove(image_id)
             session.commit()
             session.refresh(order)
             return order
 
-    def delete_order_image(self, order_id: int, image_id: int) -> Order:
+    def delete_all_order_images(self, order_id: int) -> Order:
+        """
+        전체 이미지 삭제: Order의 모든 이미지 삭제 후, order_image_list를 초기화합니다.
+        """
         with self.session_factory() as session:
             order = session.query(Order).filter(Order.id == order_id).first()
             if not order:
                 raise OrderNotFoundError(order_id)
-            # 특정 이미지가 Order에 속해있는지 확인 후 삭제
-            image = session.query(Image).filter(
-                Image.id == image_id,
-                Image.order_id == order_id  # 연관관계를 통해 확인
-            ).first()
-            if image:
-                session.delete(image)
-            # 이미지 FK가 이미 Order의 이미지 리스트에 등록되어 있으면 제거
-            if order.order_image_list and image_id in order.order_image_list:
-                order.order_image_list.remove(image_id)
+            # order.order_image_list는 이미지 ID 리스트입니다.
+            order.order_image_list = []
             session.commit()
             session.refresh(order)
             return order
@@ -194,9 +199,9 @@ class ImageRepository:
     def __init__(self, session_factory: Callable[..., AbstractContextManager[Session]]) -> None:
         self.session_factory = session_factory
 
-    def add_image(self, bucket: str, path: str) -> Image:
+    def add_image(self, bucket: str, path: str, order_id: int = None) -> Image:
         with self.session_factory() as session:
-            image = Image(bucket=bucket, path=path)
+            image = Image(bucket=bucket, path=path, order_id=order_id)
             session.add(image)
             session.commit()
             session.refresh(image)
@@ -205,3 +210,25 @@ class ImageRepository:
     def get_image_by_id(self, image_id: int) -> Image:
         with self.session_factory() as session:
             return session.query(Image).filter(Image.id == image_id).first()
+
+    def delete_images_by_order(self, order_id: int) -> None:
+        """
+        주어진 order_id에 해당하는 모든 이미지를 S3와 DB에서 삭제합니다.
+        minio_repository는 S3 파일 삭제에 사용됩니다.
+        """
+        with self.session_factory() as session:
+            # order_id를 FK로 가지는 모든 이미지 조회
+            images = session.query(Image).filter(Image.order_id == order_id).all()
+            for image in images:                
+                session.delete(image)
+            session.commit()
+
+    def delete_image(self, image_id: int) -> None:
+        """
+        주어진 image_id를 가진 이미지 행을 DB에서 삭제합니다.
+        """
+        with self.session_factory() as session:
+            img = session.query(Image).filter(Image.id == image_id).first()
+            if img:
+                session.delete(img)
+                session.commit()
