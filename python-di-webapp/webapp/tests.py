@@ -239,9 +239,8 @@ def test_get_user_with_profile_image(client, admin_auth_header, admin_user):
 @mock.patch("webapp.services.uuid.uuid4")
 def test_upload_order_image_returns_order_with_image_list(mock_uuid4, client, admin_auth_header, admin_user):
     """
-    테스트 시나리오: POST /orders/{order_id}/order-image 호출 시 업로드된 이미지가 Order에 추가되어
-    반환되는 OrderResponse 내의 orderImages 필드가 복수 개체(리스트)로 반환되고,
-    각 이미지 객체가 {id, url} 형태로 되어 있는지 확인.
+    POST /orders/{order_id}/order-image 호출 시 업로드된 이미지가 Order에 추가되어,
+    반환되는 OrderResponse 내의 orderImageList 필드가 {id, url} 형태로 구성되는지 확인합니다.
     """
     # 고정된 uuid 생성 (패치된 uuid.uuid4()가 반환)
     fake_uuid = type("FakeUUID", (), {"hex": "fixeduuid"})()
@@ -249,38 +248,35 @@ def test_upload_order_image_returns_order_with_image_list(mock_uuid4, client, ad
 
     order_id = 100
     sample_filename = "sample.png"
-    # 기존 PathHelper 함수를 사용하여 예상 파일 경로 계산
+    # PathHelper를 사용하여 예상 파일 경로 계산
     expected_file_path = PathHelper.generate_order_image_path(order_id, "fixeduuid", sample_filename)
     expected_url = "https://minio.example.com/" + expected_file_path
 
-    # 실제 Order 객체를 생성하여 order_image_list에 이미지 ID 300 추가
+    # Order 객체 생성 시 기존의 order_image_list 대신 images 관계에 실제 Image 객체를 할당
     order_obj = Order(
         id=order_id,
         name="Test Order",
         type="dummy",
         quantity="1"
     )
-    order_obj.order_image_list = [300]
-    # 테스트 시 response에서 변환된 값을 나타내기 위해 orderImages 속성을 추가(실제 구현에서는 서비스에서 수행)
-    order_obj.orderImages = [{"id": 300, "url": expected_url}]
+    # 실제 Image 모델 객체 생성 (order_id 지정)
+    fake_image = Image(id=300, bucket="minio-bucket", path=expected_file_path, order_id=order_id)
+    order_obj.images = [fake_image]
 
     order_repo_mock = mock.Mock()
-    order_repo_mock.add_order_image.return_value = order_obj
-
-    # 실제 Image 모델을 사용하여 가짜 이미지 객체 생성 (bucket 정보 포함)
-    fake_image = Image(id=300, bucket="minio-bucket", path=expected_file_path)
+    # **수정:** get_by_id()의 반환값을 실제 Order 인스턴스로 설정하여 iterable한 images 속성을 보장합니다.
+    order_repo_mock.get_by_id.return_value = order_obj
 
     image_repo_mock = mock.Mock()
     image_repo_mock.add_image.return_value = fake_image
     image_repo_mock.get_image_by_id.return_value = fake_image
 
     minio_repo_mock = mock.Mock()
-    # upload_file 메서드 호출 시 임의의 오브젝트 키 반환 (사용되지 않음)
+    # upload_file 호출 시 임의의 오브젝트 키 반환 (실제 업로드 과정은 생략)
     minio_repo_mock.upload_file.return_value = "object_key_123"
     minio_repo_mock.get_presigned_url.return_value = expected_url
 
     user_repo_mock = mock.Mock()
-    # 인증용: admin_user 반환
     user_repo_mock.get_by_email.return_value = admin_user
 
     with app.container.order_repository.override(order_repo_mock), \
@@ -294,9 +290,8 @@ def test_upload_order_image_returns_order_with_image_list(mock_uuid4, client, ad
         response = client.post(f"/orders/{order_id}/order-image", headers=admin_auth_header, files=files)
         assert response.status_code == 200
         data = response.json()
-        # orderImages 필드가 존재하며, 리스트 내의 각 이미지가 {id, url} 형태인지 확인
-        assert "orderImageList" in data
         expected_order_images = [{"id": 300, "url": expected_url}]
+        assert "orderImageList" in data
         assert data["orderImageList"] == expected_order_images
 
 ########################################################
@@ -337,36 +332,28 @@ def test_create_order(client, admin_auth_header):
 # ② 선택한 오더 이미지 삭제 테스트
 def test_delete_selected_order_image(client, admin_auth_header):
     order_id = 100
-    # 초기 오더: 두 개의 이미지 [300, 301]가 있다고 가정
+
+    # Order 객체 생성 시 images 관계에 실제 Image 객체를 할당합니다.
     initial_order = Order(
         id=order_id,
         name="Test Order",
         type="dummy",
         quantity="1"
     )
-    initial_order.order_image_list = [300, 301]
+    # 실제 Image 객체 생성 (삭제 대상과 남은 이미지)
+    image_deletion = Image(id=300, bucket="minio-bucket", path=f"orders/{order_id}/300_sample.png", order_id=order_id)
+    image_remaining = Image(id=301, bucket="minio-bucket", path=f"orders/{order_id}/301_sample.png", order_id=order_id)
+    initial_order.images = [image_deletion, image_remaining]
 
-    # 삭제 후 업데이트된 오더: 이미지 300이 제거되어 [301]만 남음
+    # 삭제 후 업데이트된 Order 객체: 삭제 대상 이미지(300)가 제거되어 남은 이미지만 포함
     updated_order = Order(
         id=order_id,
         name="Test Order",
         type="dummy",
         quantity="1"
     )
-    updated_order.order_image_list = [301]
+    updated_order.images = [image_remaining]
 
-    # image_id 300 (삭제 대상)와 301 (남은 이미지)에 대해 실제 Image 객체를 상속한 Mock 객체 생성
-    mock_image_deletion = mock.Mock(spec=Image)
-    mock_image_deletion.id = 300
-    mock_image_deletion.order_id = order_id
-    mock_image_deletion.path = f"orders/{order_id}/300_sample.png"
-
-    mock_image_remaining = mock.Mock(spec=Image)
-    mock_image_remaining.id = 301
-    mock_image_remaining.order_id = order_id
-    mock_image_remaining.path = f"orders/{order_id}/301_sample.png"
-
-    # 남은 이미지의 presigned URL 예상 값
     expected_url = f"https://minio.example.com/orders/{order_id}/301_sample.png"
 
     order_repo_mock = mock.Mock()
@@ -374,17 +361,17 @@ def test_delete_selected_order_image(client, admin_auth_header):
     order_repo_mock.delete_order_image_by_id.return_value = updated_order
 
     image_repo_mock = mock.Mock()
-    # image_id에 따라 올바른 Mock Image 객체를 반환하는 side_effect 설정
+    # image_id에 따라 실제 Image 객체를 반환하는 side_effect 설정
     def get_image_by_id_side_effect(image_id):
         if image_id == 300:
-            return mock_image_deletion
+            return image_deletion
         elif image_id == 301:
-            return mock_image_remaining
+            return image_remaining
         return None
     image_repo_mock.get_image_by_id.side_effect = get_image_by_id_side_effect
 
     minio_repo_mock = mock.Mock()
-    # 파일 경로에 따라 URL을 생성하도록 설정합니다.
+    # 파일 경로에 따라 presigned URL 생성
     minio_repo_mock.get_presigned_url.side_effect = lambda path: f"https://minio.example.com/{path}"
 
     with app.container.order_repository.override(order_repo_mock), \

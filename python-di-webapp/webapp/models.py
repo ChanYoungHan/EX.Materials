@@ -40,7 +40,6 @@ class Order(Base):
     name = Column(String, nullable=False)
     type = Column(String, nullable=False)
     quantity = Column(String, nullable=False)
-    # 기존에 ARRAY 필드를 사용하고 있었지만, 명시적 관계를 통해 Image 객체에 접근할 수 있도록 합니다.
-    order_image_list = Column(MutableList.as_mutable(ARRAY(Integer)), nullable=True)
-    # order에 속하는 이미지들을 relationship로 설정
+    # 기존의 order_image_list 컬럼은 제거합니다.
+    # 대신, Image의 외래키(order_id)를 통해 역참조 관계(images)를 활용합니다.
     images = relationship("Image", backref="order", foreign_keys=[Image.order_id])
