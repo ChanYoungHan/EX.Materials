@@ -12,11 +12,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER}" ]
       interval: 10s
       timeout: 5s
       retries: 5
-  
+    restart: unless-stopped
+
   migrate:
     image: webapp
     depends_on:
@@ -39,6 +40,7 @@ services:
     volumes:
       - "./:/code"
     command: uvicorn webapp.application:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
 
 volumes:
   postgres_data:
