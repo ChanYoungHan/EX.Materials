@@ -40,6 +40,9 @@ class UserRepository:
             return user
 
     def delete_by_id(self, user_id: int) -> None:
+        # User 삭제 전 profile_image FK 제약 조건을 고려해야 할 수 있음
+        # -> 서비스 계층에서 이미지 삭제 후 User 삭제 호출 권장
+        # -> 또는 DB 레벨에서 ON DELETE SET NULL/CASCADE 설정 고려
         with self.session_factory() as session:
             entity: User = session.query(User).filter(User.id == user_id).first()
             if not entity:
@@ -47,16 +50,24 @@ class UserRepository:
             session.delete(entity)
             session.commit()
 
-    def update_profile_image(self, user_id: int, image_id: int) -> User:
-        # DB에 Image 테이블의 id(이미지 레코드)를 저장합니다.
+    def update_profile_image(self, user_id: int, image_id: Optional[int]) -> User: # image_id를 Optional[int]로 변경
+        """사용자의 프로필 이미지를 업데이트하거나 제거합니다."""
         with self.session_factory() as session:
             user = session.query(User).filter(User.id == user_id).first()
             if not user:
                 raise UserNotFoundError(user_id)
-            user.profile_image = image_id
+            user.profile_image = image_id # None을 전달하면 FK가 NULL로 설정됨
             session.commit()
             session.refresh(user)
+            # profile_image_obj 관계 로드를 위해 재조회 또는 expire 처리 필요 가능성
+            # 여기서는 간단히 refresh된 user 반환
             return user
+
+    # === User 2번 요구사항을 위한 추가 메서드 ===
+    def clear_profile_image_fk(self, user_id: int) -> User:
+        """User 테이블의 profile_image 외래 키를 NULL로 설정합니다."""
+        return self.update_profile_image(user_id, None) # 기존 메서드 재활용
+
 
 class OrderRepository:
     def __init__(self, session_factory: Callable[..., AbstractContextManager[Session]]) -> None:
@@ -86,6 +97,9 @@ class OrderRepository:
             return order
 
     def delete_by_id(self, order_id: int) -> None:
+        # Order 삭제 전 Image의 order_id FK 제약 조건 고려
+        # -> 서비스 계층에서 관련 Image 먼저 삭제 권장
+        # -> 또는 DB 레벨에서 ON DELETE CASCADE 설정 고려
         with self.session_factory() as session:
             entity: Order = session.query(Order).filter(Order.id == order_id).first()
             if not entity:
@@ -93,22 +107,30 @@ class OrderRepository:
             session.delete(entity)
             session.commit()
 
-    def delete_order_image_by_id(self, order_id: int, image_id: int) -> Order:
-        """
-        단일 이미지 삭제: DB에서 해당 Image row를 삭제합니다.
-        """
+    # === Orders 2번 요구사항을 위한 메서드 (이름 명확화 제안) ===
+    # 기존: delete_order_image_by_id
+    def delete_single_image_for_order(self, order_id: int, image_id: int) -> Order:
+        """주문에 속한 특정 이미지를 DB에서 삭제합니다."""
         with self.session_factory() as session:
+            # 이미지가 삭제된 후 Order 객체를 반환해야 하므로, 먼저 Order를 조회
             order = self._base_order_query(session).filter(Order.id == order_id).first()
             if not order:
                 raise OrderNotFoundError(order_id)
+
             image = session.query(Image).filter(
                 Image.id == image_id,
-                Image.order_id == order_id
+                Image.order_id == order_id # 해당 주문에 속한 이미지인지 확인
             ).first()
+
             if image:
                 session.delete(image)
-            session.commit()
-            session.refresh(order)
+                session.commit()
+                # 변경사항 반영을 위해 order 객체를 expire하거나 재조회 필요할 수 있음
+                session.refresh(order) # 세션 내 객체 상태 갱신
+            else:
+                # 이미지가 없거나 해당 주문 소속이 아니면 예외 또는 특정 응답 처리 가능
+                pass # 또는 ImageNotFoundError 등 발생
+
             return order
 
 
@@ -186,22 +208,24 @@ class ImageRepository:
         with self.session_factory() as session:
             return session.query(Image).filter(Image.id == image_id).first()
 
-    def delete_images_by_order(self, order_id: int) -> None:
-        """
-        주어진 order_id에 해당하는 모든 이미지를 DB에서 삭제합니다.
-        """
-        with self.session_factory() as session:
-            images = session.query(Image).filter(Image.order_id == order_id).all()
-            for image in images:
-                session.delete(image)
-            session.commit()
-
-    def delete_image(self, image_id: int) -> None:
-        """
-        주어진 image_id를 가진 이미지 행을 DB에서 삭제합니다.
-        """
+    def delete_image(self, image_id: int) -> bool:
+        """주어진 ID의 이미지 레코드를 DB에서 삭제합니다."""
         with self.session_factory() as session:
             img = session.query(Image).filter(Image.id == image_id).first()
             if img:
                 session.delete(img)
                 session.commit()
+                return True
+            return False # 삭제할 이미지가 없음
+
+    def delete_images_by_order(self, order_id: int) -> List[str]:
+        """주어진 order_id에 해당하는 모든 이미지 레코드를 DB에서 삭제하고, 삭제된 파일 경로 리스트를 반환합니다."""
+        deleted_paths = []
+        with self.session_factory() as session:
+            images = session.query(Image).filter(Image.order_id == order_id).all()
+            if images:
+                deleted_paths = [img.path for img in images] # 경로 먼저 저장
+                for image in images:
+                    session.delete(image)
+                session.commit()
+            return deleted_paths

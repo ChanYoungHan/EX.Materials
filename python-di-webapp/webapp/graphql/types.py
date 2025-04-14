@@ -20,3 +20,8 @@ class OrderType:
     type: str
     quantity: int
     order_image_list: List[ImageType] = strawberry.field(default_factory=list)
+
+@strawberry.type
+class DeletionResult:
+    success: bool
+    message: Optional[str] = None

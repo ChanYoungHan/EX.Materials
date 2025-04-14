@@ -2,7 +2,7 @@ import strawberry
 from strawberry.fastapi import GraphQLRouter
 from typing import Optional, List
 
-from .types import UserType, OrderType
+from .types import UserType, OrderType, DeletionResult
 from .resolvers import (
     get_users_resolver,
     get_user_by_id_resolver,
@@ -10,6 +10,11 @@ from .resolvers import (
     get_orders_resolver,
     create_order_resolver,
     get_order_by_id_resolver,
+    delete_user_resolver,
+    delete_profile_image_resolver,
+    delete_order_resolver,
+    delete_single_order_image_resolver,
+    delete_all_order_images_resolver,
 )
 
 @strawberry.type
@@ -23,6 +28,11 @@ class Query:
 class Mutation:
     create_user: UserType = strawberry.mutation(resolver=create_user_resolver)
     create_order: OrderType = strawberry.mutation(resolver=create_order_resolver)
+    delete_user: DeletionResult = strawberry.mutation(resolver=delete_user_resolver)
+    delete_profile_image: UserType = strawberry.mutation(resolver=delete_profile_image_resolver)
+    delete_order: DeletionResult = strawberry.mutation(resolver=delete_order_resolver)
+    delete_single_order_image: OrderType = strawberry.mutation(resolver=delete_single_order_image_resolver)
+    delete_all_order_images: OrderType = strawberry.mutation(resolver=delete_all_order_images_resolver)
 schema = strawberry.Schema(query=Query, mutation=Mutation)
 
 # Info.context["user_service"], Info.context["order_service"]를 사용하기 위해

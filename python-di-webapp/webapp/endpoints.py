@@ -75,13 +75,23 @@ def add(
 ) -> UserResponse:
     return user_service.create_user()
 
-
+# === User 1번 요구사항: 로직 변경 (기존 엔드포인트 유지) ===
 @user_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove(
+def remove_user( # 함수명 명확화 (remove -> remove_user)
         user_id: int,
         user_service: UserService = Depends(get_user_service),
 ) -> Response:
-    return user_service.delete_user_by_id(user_id)
+    """사용자 및 연관된 프로필 이미지를 삭제합니다."""
+    return user_service.delete_user_by_id(user_id) # 서비스 메서드 호출 (수정된 로직)
+
+# === User 2번 요구사항: 신규 엔드포인트 추가 ===
+@user_router.delete("/{user_id}/profile-image", response_model=UserResponse)
+def remove_profile_image(
+        user_id: int,
+        user_service: UserService = Depends(get_user_service),
+) -> UserResponse | Response:
+    """사용자의 프로필 이미지만 삭제합니다 (S3 및 DB)."""
+    return user_service.delete_profile_image(user_id) # 새 서비스 메서드 호출
 
 # 이미지 업로드 엔드포인트 (User 프로필 이미지)
 @user_router.post("/{user_id}/profile-image", response_model=UserResponse)
@@ -133,24 +143,34 @@ def get_order_by_id(order_id: int, order_service: OrderService = Depends(get_ord
 def add_order(order_request: OrderRequest, order_service: OrderService = Depends(get_order_service)) -> OrderResponse:
     return order_service.create_order(order_request)
 
+# === Orders 1번 요구사항: 기존 엔드포인트 수정 (서비스 메서드 호출 변경 및 로직 수정) ===
 @order_router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_order(order_id: int, order_service: OrderService = Depends(get_order_service)) -> Response:
-    return order_service.delete_order_image(order_id)
+def remove_order( # 함수명 유지 또는 delete_order_by_id로 변경 고려
+        order_id: int,
+        order_service: OrderService = Depends(get_order_service)
+) -> Response:
+    """주문 및 연관된 모든 이미지를 삭제합니다."""
+    # 기존: return order_service.delete_order_image(order_id) -> 이름/로직 변경된 메서드 호출
+    return order_service.delete_order_by_id(order_id)
 
+# === Orders 2번 요구사항: 기존 엔드포인트 유지 (로직 검증) ===
 @order_router.delete("/{order_id}/order-image/{image_id}", response_model=OrderResponse)
-def delete_single_order_image(
+def delete_single_order_image( # 함수명 유지
     order_id: int,
     image_id: int,
     order_service: OrderService = Depends(get_order_service)
 ) -> OrderResponse | Response:
-    return order_service.delete_single_order_image(order_id, image_id)
+    """주문에 속한 특정 이미지를 삭제합니다."""
+    return order_service.delete_single_order_image(order_id, image_id) # 기존 서비스 메서드 호출
 
+# === Orders 3번 요구사항: 기존 엔드포인트 유지 (로직 검증) ===
 @order_router.delete("/{order_id}/order-image", response_model=OrderResponse)
-def delete_all_order_images(
+def delete_all_order_images( # 함수명 유지
     order_id: int,
     order_service: OrderService = Depends(get_order_service)
 ) -> OrderResponse | Response:
-    return order_service.delete_all_order_images(order_id)
+    """주문에 속한 모든 이미지를 삭제합니다."""
+    return order_service.delete_all_order_images(order_id) # 기존 서비스 메서드 호출
 
 # 이미지 업로드 엔드포인트 (Order 이미지)
 @order_router.post("/{order_id}/order-image", response_model=OrderResponse)

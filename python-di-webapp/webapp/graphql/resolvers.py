@@ -2,7 +2,7 @@ from typing import List, Optional
 from strawberry.types import Info
 
 from webapp.services import UserService, OrderService
-from .types import UserType, OrderType
+from .types import UserType, OrderType, DeletionResult
 from webapp.security import get_password_hash
 from webapp.schemas import OrderRequest
 
@@ -44,6 +44,22 @@ def get_user_by_id_resolver(info: Info, user_id: int) -> Optional[UserType]:
         email=user.email,
         is_active=user.is_active,
         profile_image=user.profileImage,
+    )
+
+def delete_user_resolver(info: Info, user_id: int) -> UserType:
+    user_service: UserService = info.context["user_service"]
+    result = user_service.delete_user_by_id(user_id)
+    return DeletionResult(
+        success=result.status_code == 204,
+    )
+
+def delete_profile_image_resolver(info: Info, user_id: int) -> UserType:
+    user_service: UserService = info.context["user_service"]
+    user = user_service.delete_profile_image(user_id)
+    return UserType(
+        id=user.id,
+        email=user.email,
+        is_active=user.is_active,
     )
 
 def get_orders_resolver(
@@ -90,4 +106,31 @@ def get_order_by_id_resolver(info: Info, order_id: int) -> Optional[OrderType]:
         type=order.type,
         quantity=order.quantity,
         order_image_list=order.orderImageList,
+    )
+
+def delete_order_resolver(info: Info, order_id: int) -> OrderType:
+    order_service: OrderService = info.context["order_service"]
+    order = order_service.delete_order_by_id(order_id)
+    return DeletionResult(
+        success=order.status_code == 204,
+    )
+
+def delete_single_order_image_resolver(info: Info, order_id: int, image_id: int) -> OrderType:
+    order_service: OrderService = info.context["order_service"]
+    order = order_service.delete_single_order_image(order_id, image_id)
+    return OrderType(
+        id=order.id,
+        name=order.name,
+        type=order.type,
+        quantity=order.quantity,
+    )
+
+def delete_all_order_images_resolver(info: Info, order_id: int) -> OrderType:
+    order_service: OrderService = info.context["order_service"]
+    order = order_service.delete_all_order_images(order_id)
+    return OrderType(
+        id=order.id,
+        name=order.name,
+        type=order.type,
+        quantity=order.quantity,
     )

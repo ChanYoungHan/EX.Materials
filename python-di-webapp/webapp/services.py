@@ -84,12 +84,76 @@ class UserService(PresignedUrlResolverMixin):
         user = self._repository.add(email=email, password=hashed_password, is_active=is_active, role=role)
         return UserResponse.model_validate(user)
 
+    # === User 1번 요구사항: 기존 메서드 수정 ===
     def delete_user_by_id(self, user_id: int) -> Response:
+        """사용자 및 연관된 프로필 이미지를 삭제합니다."""
         try:
+            user = self._repository.get_by_id(user_id) # 먼저 사용자 정보 조회 (profile_image FK 확인 위해)
+            if user and user.profile_image:
+                image_id_to_delete = user.profile_image
+                # User의 FK를 먼저 NULL로 설정 시도 (선택적, FK 제약조건 회피 목적)
+                # self._repository.clear_profile_image_fk(user_id) # 또는 아래에서 이미지 삭제 후 User 삭제
+
+                # 이미지 정보 조회 및 S3 객체 삭제
+                image = self.image_repository.get_image_by_id(image_id_to_delete)
+                if image:
+                    try:
+                        self.minio_repository.delete_file(image.path)
+                    except Exception as e:
+                        logger.error(f"Failed to delete S3 object {image.path} for user {user_id}: {e}")
+                        # S3 삭제 실패 시 처리 정책 필요 (예: 로깅 후 계속 진행 또는 에러 반환)
+
+                    # DB에서 이미지 레코드 삭제
+                    self.image_repository.delete_image(image_id_to_delete)
+
+            # 사용자 레코드 삭제
             self._repository.delete_by_id(user_id)
             return Response(status_code=status.HTTP_204_NO_CONTENT)
-        except NotFoundError:
+
+        except UserNotFoundError:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error deleting user {user_id}: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete user")
+
+    # === User 2번 요구사항: 신규 메서드 추가 ===
+    def delete_profile_image(self, user_id: int) -> UserResponse | Response:
+        """사용자의 프로필 이미지를 삭제합니다 (S3 및 DB)."""
+        try:
+            user = self._repository.get_by_id(user_id)
+            if not user:
+                raise UserNotFoundError(user_id)
+
+            if not user.profile_image: # 삭제할 프로필 이미지가 없는 경우
+                # 이미지가 없으므로 성공으로 간주하고 현재 사용자 정보 반환
+                self._resolve_user_image(user) # profileImage 속성 설정
+                return UserResponse.model_validate(user)
+
+            image_id_to_delete = user.profile_image
+            image = self.image_repository.get_image_by_id(image_id_to_delete)
+
+            # DB에서 User의 profile_image FK를 NULL로 업데이트
+            updated_user = self._repository.clear_profile_image_fk(user_id)
+
+            if image: # 이미지 정보가 있으면 S3 객체 삭제 시도
+                try:
+                    self.minio_repository.delete_file(image.path)
+                except Exception as e:
+                    logger.error(f"Failed to delete S3 object {image.path} for user {user_id}: {e}")
+                    # S3 삭제 실패 시 처리 정책 필요
+
+                # DB에서 이미지 레코드 삭제
+                self.image_repository.delete_image(image_id_to_delete)
+
+            # 최종 사용자 정보 (이미지 제거됨) 반환
+            self._resolve_user_image(updated_user) # profileImage 속성 설정 (None이 될 것임)
+            return UserResponse.model_validate(updated_user)
+
+        except UserNotFoundError:
+            return Response(status_code=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error deleting profile image for user {user_id}: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete profile image")
 
     def upload_profile_image(self, user_id: int, file: UploadFile):
         image_uuid = uuid.uuid4().hex
@@ -163,54 +227,92 @@ class OrderService(PresignedUrlResolverMixin):
         self._resolve_order_images(updated_order)
         return OrderResponse.model_validate(updated_order)
 
-    def delete_single_order_image(self, order_id: int, image_id: int) -> OrderResponse | Response:
-        """
-        단일 이미지 삭제:
-         1. 해당 Image 객체를 가져와 S3에서 파일 삭제
-         2. OrderRepository를 통해 DB에서 이미지를 삭제
-         3. 연관 이미지 URL을 재설정 후 응답 반환
-        """
+    # === Orders 1번 요구사항: 기존 메서드 수정 및 이름 변경 ===
+    # 기존: delete_order_image(order_id: int) -> Response: ... return self._repository.delete_by_id(order_id)
+    def delete_order_by_id(self, order_id: int) -> Response:
+        """주문 및 연관된 모든 이미지를 삭제합니다 (S3 및 DB)."""
         try:
-            order = self._repository.get_by_id(order_id)
-        except OrderNotFoundError:
-            return Response(status_code=status.HTTP_404_NOT_FOUND)
+            # DB에서 해당 주문의 모든 이미지 레코드 삭제 및 파일 경로 얻기
+            # (주의: Order 객체를 먼저 조회해서 images를 순회하면, Order 삭제 시 FK 제약 발생 가능)
+            deleted_image_paths = self.image_repository.delete_images_by_order(order_id)
 
-        img = self.image_repository.get_image_by_id(image_id)
-        if not img or img.order_id != order_id:
-            return Response(status_code=status.HTTP_404_NOT_FOUND)
+            # S3에서 관련 이미지 객체들 삭제
+            for path in deleted_image_paths:
+                try:
+                    self.minio_repository.delete_file(path)
+                except Exception as e:
+                    logger.error(f"Failed to delete S3 object {path} for order {order_id}: {e}")
+                    # S3 삭제 실패 시 처리 정책 필요
 
-        try:
-            self.minio_repository.delete_file(img.path)
+            # 주문 레코드 삭제
+            self._repository.delete_by_id(order_id)
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+        except OrderNotFoundError: # delete_by_id에서 발생 가능
+             return Response(status_code=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Failed to delete file {img.path}: {e}")
+            logger.error(f"Error deleting order {order_id}: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete order")
 
-        # OrderRepository에서 이미 삭제 처리를 수행합니다.
-        updated_order = self._repository.delete_order_image_by_id(order_id, image_id)
-        self._resolve_order_images(updated_order)
-        return OrderResponse.model_validate(updated_order)
-
-    def delete_all_order_images(self, order_id: int) -> OrderResponse | Response:
-        """
-        전체 이미지 삭제:
-         1. Order 객체를 조회한 후, order.images 관계를 통해 각 이미지에 대해 S3 파일 삭제
-         2. OrderRepository를 통해 DB의 모든 이미지 row 삭제
-         3. 연관 이미지 URL 재설정 후 응답 반환
-        """
+    # === Orders 2번 요구사항: 기존 메서드 유지 (로직 검증 및 Repository 메서드명 변경 반영) ===
+    def delete_single_order_image(self, order_id: int, image_id: int) -> OrderResponse | Response:
+        """주문에 속한 특정 이미지를 삭제합니다 (S3 및 DB)."""
         try:
-            order = self._repository.get_by_id(order_id)
-        except OrderNotFoundError:
-            return Response(status_code=status.HTTP_404_NOT_FOUND)
+            # 이미지 정보 조회 (삭제할 S3 객체 경로 확인 위해)
+            image = self.image_repository.get_image_by_id(image_id)
+            if not image or image.order_id != order_id: # 이미지가 없거나 해당 주문 소속이 아니면 404
+                return Response(status_code=status.HTTP_404_NOT_FOUND)
 
-        # 역참조 관계(images)를 통해 모든 Image 객체에 대해 S3 파일 삭제
-        for image in order.images:
+            image_path = image.path # 경로 저장
+
+            # DB에서 이미지 레코드 삭제 (OrderRepository 메서드 호출)
+            # 이 메서드는 Order 객체를 반환하므로 OrderNotFoundError 처리 가능
+            updated_order = self._repository.delete_single_image_for_order(order_id, image_id)
+            if not updated_order: # delete_single_image_for_order가 None 반환 시 (예외처리 방식에 따라 다름)
+                return Response(status_code=status.HTTP_404_NOT_FOUND)
+
+            # S3 객체 삭제
             try:
-                self.minio_repository.delete_file(image.path)
+                self.minio_repository.delete_file(image_path)
             except Exception as e:
-                logger.error(f"Failed to delete file {image.path}: {e}")
+                logger.error(f"Failed to delete S3 object {image_path} for order {order_id}, image {image_id}: {e}")
+                # S3 삭제 실패 시 처리 정책 필요
 
-        updated_order = self.image_repository.delete_images_by_order(order_id)
-        self._resolve_order_images(updated_order)
-        return OrderResponse.model_validate(updated_order)
+            # 최종 주문 정보 (이미지 제거됨) 반환
+            self._resolve_order_images(updated_order)
+            return OrderResponse.model_validate(updated_order)
+
+        except OrderNotFoundError: # _repository.delete_single_image_for_order 에서 발생 가능
+             return Response(status_code=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error deleting single image {image_id} for order {order_id}: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete order image")
+
+    # === Orders 3번 요구사항: 기존 메서드 유지 (로직 검증 및 Repository 메서드 의존성 확인) ===
+    def delete_all_order_images(self, order_id: int) -> OrderResponse | Response:
+        """주문에 속한 모든 이미지를 삭제합니다 (S3 및 DB)."""
+        try:
+            # DB에서 해당 주문의 모든 이미지 레코드 삭제 및 파일 경로 얻기
+            deleted_image_paths = self.image_repository.delete_images_by_order(order_id)
+
+            # S3에서 관련 이미지 객체들 삭제
+            for path in deleted_image_paths:
+                try:
+                    self.minio_repository.delete_file(path)
+                except Exception as e:
+                    logger.error(f"Failed to delete S3 object {path} for order {order_id}: {e}")
+                    # S3 삭제 실패 시 처리 정책 필요
+
+            # 이미지 삭제 후 최종 주문 정보 조회 및 반환
+            updated_order = self._repository.get_by_id(order_id) # 이미지 없는 상태로 조회될 것임
+            self._resolve_order_images(updated_order)
+            return OrderResponse.model_validate(updated_order)
+
+        except OrderNotFoundError:
+             return Response(status_code=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error deleting all images for order {order_id}: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete all order images")
 
 
 class AuthService:
