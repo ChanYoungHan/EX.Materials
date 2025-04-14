@@ -9,6 +9,7 @@ from .resolvers import (
     create_user_resolver,
     get_orders_resolver,
     create_order_resolver,
+    get_order_by_id_resolver,
 )
 
 @strawberry.type
@@ -16,12 +17,12 @@ class Query:
     users: List[UserType] = strawberry.field(resolver=get_users_resolver)
     user: Optional[UserType] = strawberry.field(resolver=get_user_by_id_resolver)
     orders: List[OrderType] = strawberry.field(resolver=get_orders_resolver)
+    order: Optional[OrderType] = strawberry.field(resolver=get_order_by_id_resolver)
 
 @strawberry.type
 class Mutation:
     create_user: UserType = strawberry.mutation(resolver=create_user_resolver)
     create_order: OrderType = strawberry.mutation(resolver=create_order_resolver)
-
 schema = strawberry.Schema(query=Query, mutation=Mutation)
 
 # Info.context["user_service"], Info.context["order_service"]를 사용하기 위해

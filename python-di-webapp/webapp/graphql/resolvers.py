@@ -1,11 +1,10 @@
 from typing import List, Optional
-from loguru import logger
-import strawberry
 from strawberry.types import Info
 
 from webapp.services import UserService, OrderService
 from .types import UserType, OrderType
 from webapp.security import get_password_hash
+from webapp.schemas import OrderRequest
 
 def get_users_resolver(
     info: Info,
@@ -18,22 +17,10 @@ def get_users_resolver(
             id=user.id,
             email=user.email,
             is_active=user.is_active,
-            profile_image_url=user.profileImageUrl,
+            profile_image=user.profileImage,
         )
         for user in users
     ]
-
-def get_user_by_id_resolver(info: Info, user_id: int) -> Optional[UserType]:
-    user_service: UserService = info.context["user_service"]
-    user = user_service.get_user_by_id(user_id)
-    if not user or isinstance(user, str):  # 404 시 string 혹은 다른 형태로 반환하는 경우
-        return None
-    return UserType(
-        id=user.id,
-        email=user.email,
-        is_active=user.is_active,
-        profile_image_url=user.profileImageUrl,
-    )
 
 def create_user_resolver(info: Info, email: str, password: str) -> UserType:
     user_service: UserService = info.context["user_service"]
@@ -44,6 +31,19 @@ def create_user_resolver(info: Info, email: str, password: str) -> UserType:
         id=user.id,
         email=user.email,
         is_active=user.is_active,
+    )
+
+
+def get_user_by_id_resolver(info: Info, user_id: int) -> Optional[UserType]:
+    user_service: UserService = info.context["user_service"]
+    user = user_service.get_user_by_id(user_id)
+    if not user or isinstance(user, str):  # 404 시 string 혹은 다른 형태로 반환하는 경우
+        return None
+    return UserType(
+        id=user.id,
+        email=user.email,
+        is_active=user.is_active,
+        profile_image=user.profileImage,
     )
 
 def get_orders_resolver(
@@ -57,7 +57,7 @@ def get_orders_resolver(
             name=order.name,
             type=order.type,
             quantity=order.quantity,
-            order_image_url_list=order.orderImageUrlList,
+            order_image_list=order.orderImageList,
         )
         for order in orders
     ]
@@ -70,11 +70,24 @@ def create_order_resolver(
 ) -> OrderType:
     order_service: OrderService = info.context["order_service"]
     new_order = order_service.create_order(
-        order_request={"name": name, "type": type, "quantity": quantity}
+        order_request=OrderRequest(name=name, type=type, quantity=quantity)
     )
     return OrderType(
         id=new_order.id,
         name=new_order.name,
         type=new_order.type,
         quantity=new_order.quantity,
+    )
+
+def get_order_by_id_resolver(info: Info, order_id: int) -> Optional[OrderType]:
+    order_service: OrderService = info.context["order_service"]
+    order = order_service.get_order_by_id(order_id)
+    if not order or isinstance(order, str):
+        return None
+    return OrderType(
+        id=order.id,
+        name=order.name,
+        type=order.type,
+        quantity=order.quantity,
+        order_image_list=order.orderImageList,
     )
