@@ -12,6 +12,7 @@ ResearchNote
    참고 : `LinkToBlog <https://imaginemaker.notion.site/GraphQL-1c2865424aed80419f78d3f6d7ad0694?pvs=4>`_
 - 2025-04-02 : 이미지 `backref` 연관 관계 추가
    참고 : `LinkToBlog <https://imaginemaker.notion.site/DI-template-ImageRouter-192865424aed809f974cf53516d31641?pvs=4>`_
+- 2025-04-25 : 로컬 개발 환경을 Docker 마운트에서 pyenv로 변경
 
 This is a `FastAPI <https://fastapi.tiangolo.com/>`_ +
 `SQLAlchemy <https://www.sqlalchemy.org/>`_ +
@@ -20,122 +21,117 @@ This is a `FastAPI <https://fastapi.tiangolo.com/>`_ +
 Thanks to `@ShvetsovYura <https://github.com/ShvetsovYura>`_ for providing initial example:
 `FastAPI_DI_SqlAlchemy <https://github.com/ShvetsovYura/FastAPI_DI_SqlAlchemy>`_.
 
-Run
----
+로컬 개발 환경 설정 (pyenv)
+------------------------
 
-Build the Docker image:
+pyenv를 사용한 로컬 개발 환경 설정 방법입니다.
+
+1. pyenv 및 Python 설치:
 
 .. code-block:: bash
 
+   # pyenv 설치 (MacOS 예시)
+   brew install pyenv
+   
+   # Python 설치
+   pyenv install 3.11
+   
+   # 프로젝트 디렉토리에서 Python 버전 설정
+   pyenv local 3.11
+
+2. 가상 환경 생성 및 패키지 설치:
+
+.. code-block:: bash
+
+   # 가상 환경 생성
+   pyenv virtualenv 3.11 di-server
+   
+   # 가상 환경 활성화
+   pyenv activate di-server
+   
+   # 패키지 설치
+   pip install -r requirements.txt
+
+3. 데이터베이스 실행:
+
+로컬 PostgreSQL을 사용하거나 도커로 PostgreSQL만 실행할 수 있습니다.
+
+.. code-block:: bash
+
+   # Docker를 사용하여 PostgreSQL만 실행
+   docker-compose -f docker-compose-db.yml up -d
+
+4. 환경 변수 설정:
+
+.env.local 파일을 수정하여 로컬 개발 환경에 맞게 설정합니다.
+
+5. 데이터베이스 마이그레이션 및 애플리케이션 실행:
+
+.. code-block:: bash
+
+   # 실행 스크립트를 사용하여 마이그레이션 및 애플리케이션 실행
+   chmod +x run_local.sh
+   ./run_local.sh
+   
+   # 또는 개별적으로 실행
+   export $(cat .env.local | xargs)
+   alembic upgrade head
+   uvicorn webapp.application:app --host 0.0.0.0 --port 8000 --reload
+
+운영 환경 배포
+-----------
+
+운영 환경은 Docker 컨테이너를 사용합니다.
+
+.. code-block:: bash
+
+   # 운영 환경 배포
    docker-compose build
+   docker-compose up -d
 
-Run the docker-compose environment:
+API 문서
+-------
 
-.. code-block:: bash
+애플리케이션이 실행된 후 http://127.0.0.1:8000/docs 에서 API 문서를 확인할 수 있습니다.
 
-    docker-compose up
-
-The output should be something like:
-
-.. code-block::
-
-   Starting fastapi-sqlalchemy_webapp_1 ... done
-   Attaching to fastapi-sqlalchemy_webapp_1
-   webapp_1  | 2022-02-04 22:07:19,804 INFO sqlalchemy.engine.base.Engine SELECT CAST('test plain returns' AS VARCHAR(60)) AS anon_1
-   webapp_1  | 2022-02-04 22:07:19,804 INFO sqlalchemy.engine.base.Engine ()
-   webapp_1  | 2022-02-04 22:07:19,804 INFO sqlalchemy.engine.base.Engine SELECT CAST('test unicode returns' AS VARCHAR(60)) AS anon_1
-   webapp_1  | 2022-02-04 22:07:19,804 INFO sqlalchemy.engine.base.Engine ()
-   webapp_1  | 2022-02-04 22:07:19,805 INFO sqlalchemy.engine.base.Engine PRAGMA main.table_info("users")
-   webapp_1  | 2022-02-04 22:07:19,805 INFO sqlalchemy.engine.base.Engine ()
-   webapp_1  | 2022-02-04 22:07:19,808 INFO sqlalchemy.engine.base.Engine PRAGMA temp.table_info("users")
-   webapp_1  | 2022-02-04 22:07:19,808 INFO sqlalchemy.engine.base.Engine ()
-   webapp_1  | 2022-02-04 22:07:19,809 INFO sqlalchemy.engine.base.Engine
-   webapp_1  | CREATE TABLE users (
-   webapp_1  | 	id INTEGER NOT NULL,
-   webapp_1  | 	email VARCHAR,
-   webapp_1  | 	hashed_password VARCHAR,
-   webapp_1  | 	is_active BOOLEAN,
-   webapp_1  | 	PRIMARY KEY (id),
-   webapp_1  | 	UNIQUE (email),
-   webapp_1  | 	CHECK (is_active IN (0, 1))
-   webapp_1  | )
-   webapp_1  |
-   webapp_1  |
-   webapp_1  | 2022-02-04 22:07:19,810 INFO sqlalchemy.engine.base.Engine ()
-   webapp_1  | 2022-02-04 22:07:19,821 INFO sqlalchemy.engine.base.Engine COMMIT
-   webapp_1  | INFO:     Started server process [8]
-   webapp_1  | INFO:     Waiting for application startup.
-   webapp_1  | INFO:     Application startup complete.
-   webapp_1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-
-After that visit http://127.0.0.1:8000/docs in your browser.
-
-Test
+테스트
 ----
 
-This application comes with the unit tests.
+단위 테스트를 실행하려면:
 
-To run the tests do:
+로컬 환경에서:
+
+.. code-block:: bash
+
+   # 환경 변수 설정
+   export $(cat .env.local | xargs)
+   
+   # 테스트 실행
+   pytest webapp/tests.py --cov=webapp
+
+Docker 환경에서:
 
 .. code-block:: bash
 
    docker-compose run --rm webapp py.test webapp/tests.py --cov=webapp
-   docker-compose -f docker-compose-dev.yml run --rm webapp py.test webapp/tests.py --cov=webapp
-
-The output should be something like:
-
-.. code-block::
-
-   platform linux -- Python 3.10.0, pytest-6.2.5, py-1.10.0, pluggy-1.0.0
-   rootdir: /code
-   plugins: cov-3.0.0
-   collected 7 items
-
-   webapp/tests.py .......                                         [100%]
-
-   ---------- coverage: platform linux, python 3.10.0-final-0 ----------
-   Name                     Stmts   Miss  Cover
-   --------------------------------------------
-   webapp/__init__.py           0      0   100%
-   webapp/application.py       12      0   100%
-   webapp/containers.py        10      0   100%
-   webapp/database.py          24      8    67%
-   webapp/endpoints.py         32      0   100%
-   webapp/models.py            10      1    90%
-   webapp/repositories.py      36     20    44%
-   webapp/services.py          16      0   100%
-   webapp/tests.py             59      0   100%
-   --------------------------------------------
-   TOTAL                      199     29    85%
 
 Migrations
 ----------
 
-To create a new migration, run:
+새로운 마이그레이션을 생성하려면:
+
+로컬 환경에서:
+
+.. code-block:: bash
+
+   # 환경 변수 설정
+   export $(cat .env.local | xargs)
+   
+   # 마이그레이션 생성
+   alembic revision --autogenerate -m "migration_name"
+
+Docker 환경에서:
 
 .. code-block:: bash
 
    docker-compose run --rm webapp alembic revision --autogenerate -m "migration_name"
-
-Activation
-----------
-
-Due to lack of service execution options in docker-compose, services need to be run individually.
-
-First, run the database service:
-
-.. code-block:: bash
-
-   docker-compose up -d postgres
-
-Second, run the migration service:
-
-.. code-block:: bash
-
-   docker-compose up migrations
-
-Third, run the webapp service:
-
-.. code-block:: bash
-
-   docker-compose up -d webapp
