@@ -73,8 +73,7 @@ pyenv를 사용한 로컬 개발 환경 설정 방법입니다.
    ./run_local.sh
    
    # 또는 개별적으로 실행
-   export $(cat .env.local | xargs)
-   alembic upgrade head
+   alembic -c alembic.local.ini upgrade head
    uvicorn webapp.application:app --host 0.0.0.0 --port 8000 --reload
 
 운영 환경 배포
@@ -102,9 +101,6 @@ API 문서
 
 .. code-block:: bash
 
-   # 환경 변수 설정
-   export $(cat .env.local | xargs)
-   
    # 테스트 실행
    pytest webapp/tests.py --cov=webapp
 

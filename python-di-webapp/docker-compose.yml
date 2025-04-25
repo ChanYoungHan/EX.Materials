@@ -21,8 +21,6 @@ services:
   migrate:
     image: webapp
     build: ./
-    env_file:
-      - .env.production
     depends_on:
       - postgres
     # 마이그레이션 수행 후 컨테이너 종료
@@ -37,10 +35,10 @@ services:
       - migrate
     build: ./
     image: webapp
-    env_file:
-      - .env.production
     ports:
       - "8000:8000"
+    volumes:
+      - "./:/code"
     command: uvicorn webapp.application:app --host 0.0.0.0 --port 8000
     restart: unless-stopped
 
