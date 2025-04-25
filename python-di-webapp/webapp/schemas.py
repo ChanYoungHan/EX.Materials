@@ -1,7 +1,13 @@
 # schemas.py
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from typing import List, Union, Optional
+from typing import List, Optional
 
+
+class ImageSchema(BaseModel):
+    id: int
+    path: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 class ImageResponse(BaseModel):
     id: int

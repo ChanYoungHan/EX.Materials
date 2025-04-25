@@ -1,14 +1,14 @@
 import asyncio
 
 from contextlib import AbstractContextManager
-from typing import Callable, Iterator, BinaryIO, List, Optional
+from typing import Callable, Iterator, BinaryIO, List, Optional, Any
 from datetime import timedelta
 
 from sqlalchemy.orm import Session, joinedload
 from minio import Minio
 from minio.error import S3Error
 
-from .models import User, Order, Image
+from .models import User, Order, Image, MainPageSetting
 from .schemas import OrderRequest
 
 class UserRepository:
@@ -229,3 +229,48 @@ class ImageRepository:
                     session.delete(image)
                 session.commit()
             return deleted_paths
+
+
+class MainPageSettingRepository:
+    """
+    메인 페이지 설정을 관리하는 리포지토리.
+    키-값 형태로 설정을 저장하고 조회합니다.
+    """
+    def __init__(self, session_factory: Callable[..., AbstractContextManager[Session]]) -> None:
+        self.session_factory = session_factory
+
+    def get_setting(self, key: str) -> Optional[Any]:
+        """특정 설정 키의 값을 가져옵니다."""
+        with self.session_factory() as session:
+            setting = session.query(MainPageSetting.setting_value)\
+                        .filter(MainPageSetting.setting_key == key)\
+                        .scalar()
+            return setting  # 예: 123 또는 [45, 67, 89]
+
+    def upsert_setting(self, key: str, value: Any) -> None:
+        """설정 키-값을 추가하거나 업데이트합니다 (UPSERT)."""
+        with self.session_factory() as session:
+            # 먼저 기존 설정이 있는지 확인
+            existing = session.query(MainPageSetting)\
+                        .filter(MainPageSetting.setting_key == key)\
+                        .first()
+            
+            if existing:
+                # 기존 설정이 있으면 업데이트
+                existing.setting_value = value
+            else:
+                # 없으면 새로 생성
+                new_setting = MainPageSetting(setting_key=key, setting_value=value)
+                session.add(new_setting)
+            
+            session.commit()
+
+    def delete_setting(self, key: str) -> bool:
+        """특정 설정 키를 삭제합니다. 삭제된 경우 True를 반환합니다."""
+        with self.session_factory() as session:
+            result = session.query(MainPageSetting)\
+                    .filter(MainPageSetting.setting_key == key)\
+                    .delete()
+            session.commit()
+            return result > 0
+

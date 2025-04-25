@@ -2,13 +2,14 @@
 
 import asyncio
 import time
-from fastapi import APIRouter, Depends, Response, status, UploadFile, File
+from fastapi import APIRouter, Depends, Response, status, UploadFile, File, Query
 from dependency_injector.wiring import inject, Provide
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from typing import Optional, Dict, List
 
 from .containers import Container
-from .services import UserService, OrderService, AuthService
-from .schemas import UserResponse, OrderResponse, OrderRequest, UserRequest, AuthResponse
+from .services import UserService, OrderService, AuthService, MainPageService
+from .schemas import UserResponse, OrderResponse, OrderRequest, UserRequest, AuthResponse, ImageResponse
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -28,6 +29,13 @@ def get_order_service(
 def get_auth_service(auth_service: AuthService = Depends(Provide[Container.auth_service])) -> AuthService:
     return auth_service
 
+@inject
+def get_landing_service(
+    main_page_service: MainPageService = Depends(Provide[Container.main_page_service])
+) -> MainPageService:
+    return main_page_service
+
+
 def current_user_dependency(token: str = Depends(oauth2_scheme), auth_service: AuthService = Depends(get_auth_service)):
     return auth_service.get_current_user(token)
 
@@ -38,6 +46,17 @@ test_router = APIRouter(prefix="/test", tags=["test"])
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 user_router = APIRouter(prefix="/users", tags=["users"], dependencies=[Depends(admin_dependency)])
 order_router = APIRouter(prefix="/orders", tags=["orders"], dependencies=[Depends(admin_dependency)])
+main_page_admin_router = APIRouter(
+    prefix="/mainPageAdmin", 
+    tags=["mainPageAdmin"],
+    dependencies=[Depends(admin_dependency)]  # 관리자 권한 검사
+)
+
+main_page_router = APIRouter(
+    prefix="/mainPage", 
+    tags=["mainPage"]
+)
+
 
 
 ########################################################
@@ -181,3 +200,56 @@ def upload_order_image(
 ):
     return order_service.upload_order_image(order_id, file)
 
+
+########################################################
+# MainPage ADMIN
+########################################################
+@main_page_admin_router.put("/uploadImage/main", response_model=ImageResponse)
+def upload_main_image(
+    file: UploadFile = File(...),
+    main_page_service: MainPageService = Depends(get_landing_service)
+):
+    """랜딩 페이지 메인 이미지를 업로드하고 설정합니다."""
+    return main_page_service.set_main_image(file)
+
+@main_page_admin_router.delete("/deleteImage/main", status_code=status.HTTP_204_NO_CONTENT)
+def delete_main_image(
+    main_page_service: MainPageService = Depends(get_landing_service)
+):
+    """랜딩 페이지 메인 이미지를 삭제합니다."""
+    main_page_service.delete_main_image()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@main_page_admin_router.post("/uploadImage/gallery", response_model=List[ImageResponse])
+def upload_gallery_image(
+    file: UploadFile = File(...),
+    main_page_service: MainPageService = Depends(get_landing_service)
+):
+    """랜딩 페이지 갤러리에 이미지를 추가합니다."""
+    return main_page_service.add_gallery_image(file)
+
+@main_page_admin_router.delete("/deleteImage/gallery", status_code=status.HTTP_204_NO_CONTENT)
+def delete_gallery_image(
+    image_id: int = Query(..., description="삭제할 이미지 ID"),
+    main_page_service: MainPageService = Depends(get_landing_service)
+):
+    """랜딩 페이지 갤러리에서 이미지를 삭제합니다."""
+    main_page_service.delete_gallery_image(image_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+########################################################
+# MainPage
+########################################################
+@main_page_router.get("/mainImage", response_model=Optional[ImageResponse])
+def get_main_image(
+    main_page_service: MainPageService = Depends(get_landing_service)
+):
+    """현재 설정된 랜딩 페이지 메인 이미지를 조회합니다."""
+    return main_page_service.get_main_image()
+
+@main_page_router.get("/galleryImages", response_model=List[ImageResponse])
+def get_gallery_images(
+    main_page_service: MainPageService = Depends(get_landing_service)
+):
+    """현재 설정된 랜딩 페이지 갤러리 이미지 목록을 조회합니다."""
+    return main_page_service.get_gallery_images()

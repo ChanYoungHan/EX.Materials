@@ -2,10 +2,9 @@
 
 from dependency_injector import containers, providers
 from .database import Database
-from .repositories import UserRepository, OrderRepository, MinioRepository, ImageRepository
-from .services import UserService, OrderService, AuthService
+from .repositories import UserRepository, OrderRepository, MinioRepository, ImageRepository, MainPageSettingRepository
+from .services import UserService, OrderService, AuthService, MainPageService
 from minio import Minio
-from .logger_config import configure_logger
 
 import os
 
@@ -73,4 +72,16 @@ class Container(containers.DeclarativeContainer):
     auth_service = providers.Factory(
         AuthService,
         user_repository=user_repository,
+    )
+
+    main_page_repository = providers.Factory(
+        MainPageSettingRepository,
+        session_factory=db.provided.session,
+    )
+
+    main_page_service = providers.Factory(
+        MainPageService,
+        main_repository=main_page_repository,
+        minio_repository=minio_repository,
+        image_repository=image_repository,
     )

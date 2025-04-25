@@ -29,6 +29,8 @@ def create_app() -> FastAPI:
     app.include_router(endpoints.user_router)
     app.include_router(endpoints.order_router)
     app.include_router(endpoints.auth_router)
+    app.include_router(endpoints.main_page_admin_router)
+    app.include_router(endpoints.main_page_router)
     app.include_router(graphql_app, prefix="/graphql")
 
 
