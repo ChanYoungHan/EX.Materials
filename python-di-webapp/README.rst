@@ -12,6 +12,8 @@ ResearchNote
    참고 : `LinkToBlog <https://imaginemaker.notion.site/GraphQL-1c2865424aed80419f78d3f6d7ad0694?pvs=4>`_
 - 2025-04-02 : 이미지 `backref` 연관 관계 추가
    참고 : `LinkToBlog <https://imaginemaker.notion.site/DI-template-ImageRouter-192865424aed809f974cf53516d31641?pvs=4>`_
+- 2025-04-26 : NoSQL 도입
+   참고 : `LinkToBlog <https://imaginemaker.notion.site/DI-template-noSQL-1e0865424aed8059b878f1f47fc8f09e?pvs=4>`_
 
 This is a `FastAPI <https://fastapi.tiangolo.com/>`_ +
 `SQLAlchemy <https://www.sqlalchemy.org/>`_ +
