@@ -1,8 +1,11 @@
 import asyncio
 
 from contextlib import AbstractContextManager
-from typing import Callable, Iterator, BinaryIO, List, Optional, Any
-from datetime import timedelta
+from typing import Callable, Iterator, BinaryIO, List, Optional, Any, Dict
+from datetime import timedelta, datetime
+from bson import ObjectId
+from pymongo.collection import Collection
+
 
 from sqlalchemy.orm import Session, joinedload
 from minio import Minio
@@ -10,6 +13,9 @@ from minio.error import S3Error
 
 from .models import User, Order, Image, MainPageSetting
 from .schemas import OrderRequest
+from .logger_config import configure_logger
+
+logger = configure_logger()
 
 class UserRepository:
 
@@ -274,3 +280,109 @@ class MainPageSettingRepository:
             session.commit()
             return result > 0
 
+
+class DocumentRepository:
+    """Repository for managing documents in a MongoDB collection."""
+    
+    def __init__(self, get_collection: Callable[[str], Collection], collection_name: str) -> None:
+        """
+        MongoDB 컬렉션에 액세스하는 문서 리포지토리를 초기화합니다.
+        
+        Args:
+            get_collection: 컬렉션 이름으로 컬렉션 객체를 반환하는 함수
+            collection_name: 사용할 컬렉션 이름
+        """
+        self.get_collection = get_collection
+        self.collection_name = collection_name
+    
+    @property
+    def collection(self) -> Collection:
+        """현재 리포지토리가 사용하는 컬렉션 객체를 반환합니다."""
+        return self.get_collection(self.collection_name)
+    
+    def insert_one(self, document: Dict) -> Optional[str]:
+        """컬렉션에 단일 문서를 삽입합니다."""
+        try:
+            # 생성 시간 추가
+            if 'created_at' not in document:
+                document['created_at'] = datetime.utcnow()
+            
+            result = self.collection.insert_one(document)
+            return str(result.inserted_id)
+        except Exception as e:
+            logger.error(f"Error inserting document into {self.collection_name}: {e}")
+            return None
+    
+    def find_by_id(self, id: str) -> Optional[Dict]:
+        """ID로 문서를 조회합니다."""
+        try:
+            result = self.collection.find_one({"_id": ObjectId(id)})
+            if result and '_id' in result:
+                result['_id'] = str(result['_id'])  # ObjectId를 문자열로 변환
+            return result
+        except Exception as e:
+            logger.error(f"Error finding document by ID in {self.collection_name}: {e}")
+            return None
+    
+    def find_many(self, filter_dict: Dict = None, 
+                 sort: List = None, 
+                 limit: int = 0, 
+                 skip: int = 0) -> List[Dict]:
+        """여러 문서를 조회합니다."""
+        filter_dict = filter_dict or {}
+        try:
+            cursor = self.collection.find(filter_dict)
+            
+            if sort:
+                cursor = cursor.sort(sort)
+            if skip:
+                cursor = cursor.skip(skip)
+            if limit:
+                cursor = cursor.limit(limit)
+                
+            results = list(cursor)
+            
+            # ObjectId를 문자열로 변환
+            for result in results:
+                if '_id' in result:
+                    result['_id'] = str(result['_id'])
+            return results
+        except Exception as e:
+            logger.error(f"Error finding documents in {self.collection_name}: {e}")
+            return []
+    
+    def update_by_id(self, id: str, update_dict: Dict) -> Optional[int]:
+        """ID로 문서를 업데이트합니다."""
+        try:
+            # 업데이트 시간 추가
+            if '$set' in update_dict:
+                update_dict['$set']['updated_at'] = datetime.utcnow()
+            else:
+                update_dict['$set'] = {'updated_at': datetime.utcnow()}
+                
+            result = self.collection.update_one(
+                {"_id": ObjectId(id)}, 
+                update_dict
+            )
+            return result.modified_count
+        except Exception as e:
+            logger.error(f"Error updating document in {self.collection_name}: {e}")
+            return None
+    
+    def delete_by_id(self, id: str) -> Optional[int]:
+        """ID로 문서를 삭제합니다."""
+        try:
+            result = self.collection.delete_one({"_id": ObjectId(id)})
+            return result.deleted_count
+        except Exception as e:
+            logger.error(f"Error deleting document in {self.collection_name}: {e}")
+            return None
+    
+    def count_documents(self, filter_dict: Dict = None) -> int:
+        """문서 수를 계산합니다."""
+        filter_dict = filter_dict or {}
+        try:
+            return self.collection.count_documents(filter_dict)
+        except Exception as e:
+            logger.error(f"Error counting documents in {self.collection_name}: {e}")
+            return 0

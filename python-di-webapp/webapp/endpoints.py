@@ -2,14 +2,14 @@
 
 import asyncio
 import time
-from fastapi import APIRouter, Depends, Response, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, Response, status, UploadFile, File, Query, Path
 from dependency_injector.wiring import inject, Provide
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Optional, Dict, List
 
 from .containers import Container
-from .services import UserService, OrderService, AuthService, MainPageService
-from .schemas import UserResponse, OrderResponse, OrderRequest, UserRequest, AuthResponse, ImageResponse
+from .services import UserService, OrderService, AuthService, MainPageService, TestNoSQLService
+from .schemas import UserResponse, OrderResponse, OrderRequest, UserRequest, AuthResponse, ImageResponse, TestDocumentCreate, TestDocumentUpdate, TestDocumentResponse
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -35,6 +35,11 @@ def get_landing_service(
 ) -> MainPageService:
     return main_page_service
 
+@inject
+def get_nosql_service(
+    nosql_service: TestNoSQLService = Depends(Provide[Container.nosql_service])
+) -> TestNoSQLService:
+    return nosql_service
 
 def current_user_dependency(token: str = Depends(oauth2_scheme), auth_service: AuthService = Depends(get_auth_service)):
     return auth_service.get_current_user(token)
@@ -51,13 +56,15 @@ main_page_admin_router = APIRouter(
     tags=["mainPageAdmin"],
     dependencies=[Depends(admin_dependency)]  # 관리자 권한 검사
 )
-
 main_page_router = APIRouter(
     prefix="/mainPage", 
     tags=["mainPage"]
 )
-
-
+nosql_router = APIRouter(
+    prefix="/nosql",
+    tags=["nosql"],
+    dependencies=[Depends(admin_dependency)]  # admin 권한 필요
+)
 
 ########################################################
 # AUTH
@@ -253,3 +260,52 @@ def get_gallery_images(
 ):
     """현재 설정된 랜딩 페이지 갤러리 이미지 목록을 조회합니다."""
     return main_page_service.get_gallery_images()
+
+########################################################
+# NoSQL
+########################################################
+
+@nosql_router.post("", response_model=TestDocumentResponse, status_code=status.HTTP_201_CREATED)
+def create_document(
+    document: TestDocumentCreate,
+    nosql_service: TestNoSQLService = Depends(get_nosql_service)
+):
+    """새로운 테스트 문서를 생성합니다."""
+    return nosql_service.create_document(document.model_dump())
+
+@nosql_router.get("", response_model=List[TestDocumentResponse])
+def get_documents(
+    limit: int = Query(100, ge=1, le=1000, description="한 번에 가져올 최대 문서 수"),
+    skip: int = Query(0, ge=0, description="건너뛸 문서 수"),
+    nosql_service: TestNoSQLService = Depends(get_nosql_service)
+):
+    """테스트 문서 목록을 조회합니다."""
+    return nosql_service.get_documents(limit=limit, skip=skip)
+
+@nosql_router.get("/{document_id}", response_model=TestDocumentResponse)
+def get_document(
+    document_id: str = Path(..., description="조회할 문서의 ID"),
+    nosql_service: TestNoSQLService = Depends(get_nosql_service)
+):
+    """ID로 테스트 문서를 조회합니다."""
+    return nosql_service.get_document_by_id(document_id)
+
+@nosql_router.put("/{document_id}", response_model=TestDocumentResponse)
+def update_document(
+    document: TestDocumentUpdate,
+    document_id: str = Path(..., description="업데이트할 문서의 ID"),
+    nosql_service: TestNoSQLService = Depends(get_nosql_service)
+):
+    """ID로 테스트 문서를 업데이트합니다."""
+    # None이 아닌 필드만 업데이트
+    update_data = {k: v for k, v in document.model_dump().items() if v is not None}
+    return nosql_service.update_document(document_id, update_data)
+
+@nosql_router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    document_id: str = Path(..., description="삭제할 문서의 ID"),
+    nosql_service: TestNoSQLService = Depends(get_nosql_service)
+):
+    """ID로 테스트 문서를 삭제합니다."""
+    nosql_service.delete_document(document_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

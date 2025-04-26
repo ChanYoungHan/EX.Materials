@@ -3,7 +3,7 @@
 import uuid
 from uuid import uuid4
 from fastapi import status, Response, HTTPException, UploadFile
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import Optional, Dict, List
 from loguru import logger
 
@@ -15,7 +15,8 @@ from .repositories import (
     ImageRepository,
     MainPageSettingRepository,
     UserNotFoundError,
-    OrderNotFoundError
+    OrderNotFoundError,
+    DocumentRepository
 )
 from .schemas import UserResponse, OrderResponse, OrderRequest, AuthResponse, ImageSchema, ImageResponse
 from .security import verify_password, get_password_hash, decode_access_token, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -556,4 +557,166 @@ class MainPageService(FileHandlerMixin):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to get gallery images"
+            )
+
+
+class TestNoSQLService:
+    """Service for testing NoSQL operations."""
+    
+    def __init__(self, document_repository: DocumentRepository):
+        """
+        NoSQL 테스트 서비스를 초기화합니다.
+        
+        Args:
+            document_repository: 문서 리포지토리 인스턴스
+        """
+        self.document_repository = document_repository
+        
+    def create_document(self, data: Dict) -> Dict:
+        """새 문서를 생성합니다."""
+        try:
+            # 타임스탬프 추가
+            if 'created_at' not in data:
+                data['created_at'] = datetime.utcnow()
+                
+            # 문서 삽입
+            doc_id = self.document_repository.insert_one(data)
+            
+            if not doc_id:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to create document"
+                )
+                
+            # 생성된 문서 조회
+            new_doc = self.document_repository.find_by_id(doc_id)
+            if not new_doc:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Document created but could not be retrieved"
+                )
+                
+            return new_doc
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error creating document: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create document: {str(e)}"
+            )
+            
+    def get_document_by_id(self, document_id: str) -> Dict:
+        """ID로 문서를 조회합니다."""
+        try:
+            document = self.document_repository.find_by_id(document_id)
+            
+            if not document:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Document with ID {document_id} not found"
+                )
+                
+            return document
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error retrieving document: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retrieve document: {str(e)}"
+            )
+            
+    def get_documents(self, filter_dict: Dict = None, limit: int = 100, skip: int = 0) -> List[Dict]:
+        """여러 문서를 조회합니다."""
+        try:
+            documents = self.document_repository.find_many(
+                filter_dict=filter_dict, 
+                limit=limit, 
+                skip=skip, 
+                sort=[("created_at", -1)]  # 생성일 기준 내림차순
+            )
+            
+            return documents
+            
+        except Exception as e:
+            logger.error(f"Error retrieving documents: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retrieve documents: {str(e)}"
+            )
+            
+    def update_document(self, document_id: str, data: Dict) -> Dict:
+        """ID로 문서를 업데이트합니다."""
+        try:
+            # 문서 존재 확인
+            existing_doc = self.document_repository.find_by_id(document_id)
+            
+            if not existing_doc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Document with ID {document_id} not found"
+                )
+                
+            # 업데이트 시간 추가
+            data['updated_at'] = datetime.utcnow()
+            
+            # 문서 업데이트
+            update_result = self.document_repository.update_by_id(
+                document_id, 
+                {"$set": data}
+            )
+            
+            if not update_result:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to update document"
+                )
+                
+            # 업데이트된 문서 조회
+            updated_doc = self.document_repository.find_by_id(document_id)
+            
+            return updated_doc
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error updating document: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update document: {str(e)}"
+            )
+            
+    def delete_document(self, document_id: str) -> bool:
+        """ID로 문서를 삭제합니다."""
+        try:
+            # 문서 존재 확인
+            existing_doc = self.document_repository.find_by_id(document_id)
+            
+            if not existing_doc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Document with ID {document_id} not found"
+                )
+                
+            # 문서 삭제
+            delete_result = self.document_repository.delete_by_id(document_id)
+            
+            if not delete_result:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to delete document"
+                )
+                
+            return True
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error deleting document: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to delete document: {str(e)}"
             )
