@@ -6,14 +6,13 @@ from datetime import timedelta, datetime
 from bson import ObjectId
 from pymongo.collection import Collection
 
-
 from sqlalchemy.orm import Session, joinedload
 from minio import Minio
 from minio.error import S3Error
 
 from .models import User, Order, Image, MainPageSetting
 from .schemas import OrderRequest
-from .logger_config import configure_logger
+from .utils.logger_config import configure_logger
 
 logger = configure_logger()
 

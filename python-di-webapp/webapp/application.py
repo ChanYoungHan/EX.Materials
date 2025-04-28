@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .containers import Container
 from . import endpoints
-from .logger_config import configure_logger
+from .utils.logger_config import configure_logger
 from .graphql.schema import graphql_app
 
 def create_app() -> FastAPI:
