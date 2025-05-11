@@ -13,6 +13,8 @@ from .services import (
 from .resources import init_mongodb_db
 from minio import Minio
 import os
+from pathlib import Path
+from .core.crypto import RSACrypto
 
 def init_minio_client(endpoint: str, access_key: str, secret_key: str, secure: bool) -> Minio:
     return Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
@@ -35,6 +37,30 @@ class Container(containers.DeclarativeContainer):
         init_mongodb_db,
         mongodb_uri=config.mongodb.uri,
         database=config.mongodb.db_name,
+    )
+
+    crypto = providers.Singleton(
+        RSACrypto,
+        private_key_path=os.path.join(
+            Path(__file__).parent.parent,  # 프로젝트 루트            
+            config.owner_auth.keys_dir(),  # 설정에서 키 디렉토리 가져오기
+            config.owner_auth.private_key_filename()  # 설정에서 비밀키 파일 이름 가져오기
+        ),
+        public_key_path=os.path.join(
+            Path(__file__).parent.parent,  # 프로젝트 루트
+            config.owner_auth.keys_dir(),  # 설정에서 키 디렉토리 가져오기
+            config.owner_auth.public_key_filename()  # 설정에서 공개키 파일 이름 가져오기
+        ),
+        log_owner_email=config.owner_auth.log_owner_email
+    )
+
+    # crypto/owner_auth 관련 설정 DI
+    
+    owner_auth_header_name = providers.Callable(
+        config.owner_auth.owner_header_name
+    )
+    owner_auth_protected_paths = providers.Callable(
+        config.owner_auth.protected_paths
     )
 
     # SQL Repositories
@@ -119,3 +145,4 @@ class Container(containers.DeclarativeContainer):
         TestNoSQLService,
         document_repository=test_document_repository,
     )
+

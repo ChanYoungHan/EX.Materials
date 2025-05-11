@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from fastapi import APIRouter, Depends, Response, status, UploadFile, File, Query, Path
+from fastapi import APIRouter, Depends, Response, status, UploadFile, File, Query, Path, Request
 from dependency_injector.wiring import inject, Provide
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Optional, Dict, List
@@ -309,3 +309,11 @@ def delete_document(
     """ID로 테스트 문서를 삭제합니다."""
     nosql_service.delete_document(document_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@test_router.get("/api/protected/test-owner")
+async def test_owner(request: Request):
+    owner_email = getattr(request.state, "owner_email", None)
+    return {
+        "message": "Protected endpoint",
+        "owner_email": owner_email
+    }
