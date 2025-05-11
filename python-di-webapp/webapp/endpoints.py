@@ -151,6 +151,16 @@ def sync_wait():
 def cpu_bound():
     return sum(i*i for i in range(10**7))
 
+# 소유자 인증 엔드포인트
+@test_router.get("/api/protected/test-owner")
+async def test_owner(request: Request):
+    owner_email = getattr(request.state, "owner_email", None)
+    return {
+        "message": "Protected endpoint",
+        "owner_email": owner_email
+    }
+
+
 ########################################################
 # ORDER
 ########################################################
@@ -309,11 +319,3 @@ def delete_document(
     """ID로 테스트 문서를 삭제합니다."""
     nosql_service.delete_document(document_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-@test_router.get("/api/protected/test-owner")
-async def test_owner(request: Request):
-    owner_email = getattr(request.state, "owner_email", None)
-    return {
-        "message": "Protected endpoint",
-        "owner_email": owner_email
-    }

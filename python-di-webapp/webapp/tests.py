@@ -9,8 +9,8 @@ import io
 from webapp.application import app
 from webapp.models import User, Image, Order
 from webapp.repositories import UserRepository, UserNotFoundError
-from webapp.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, get_password_hash
-from webapp.utils import PathHelper
+from webapp.middleware.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, get_password_hash
+from webapp.utils.path_helper import PathHelper
 
 # 기본 클라이언트 픽스처
 @pytest.fixture
