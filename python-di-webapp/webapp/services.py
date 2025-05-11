@@ -19,7 +19,7 @@ from .repositories import (
     DocumentRepository
 )
 from .schemas import UserResponse, OrderResponse, OrderRequest, AuthResponse, ImageSchema, ImageResponse
-from .middleware.security import verify_password, get_password_hash, decode_access_token, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from .core.security import verify_password, get_password_hash, decode_access_token, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from .utils.path_helper import PathHelper
 
 class FileHandlerMixin:

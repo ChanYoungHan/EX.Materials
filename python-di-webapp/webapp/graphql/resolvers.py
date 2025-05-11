@@ -3,7 +3,7 @@ from strawberry.types import Info
 
 from webapp.services import UserService, OrderService
 from .types import UserType, OrderType, DeletionResult
-from webapp.middleware.security import get_password_hash
+from webapp.core.security import get_password_hash
 from webapp.schemas import OrderRequest
 
 def get_users_resolver(
