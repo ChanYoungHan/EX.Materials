@@ -229,7 +229,8 @@ class OrderService(FileHandlerMixin):
                 images.append({"id": image.id, "url": url})
         setattr(order, "orderImageList", images)
 
-    def get_orders(self) -> list[OrderResponse]:
+    def get_orders(self, owner_email: Optional[str]) -> list[OrderResponse]:
+        logger.info(f"get_orders owner_email: {owner_email}")
         orders = self._repository.get_all()
         for order in orders:
             self._resolve_order_images(order)
@@ -443,8 +444,9 @@ class MainPageService(FileHandlerMixin):
                 detail="Failed to delete main image"
             )
     
-    def get_main_image(self) -> Optional[ImageResponse]:
+    def get_main_image(self, owner_email: Optional[str]) -> Optional[ImageResponse]:
         """현재 메인 이미지 정보를 조회합니다."""
+        logger.info(f"get_main_image owner_email: {owner_email}")
         try:
             image_id = self._repository.get_setting('main_image_id')
             if not image_id:
@@ -543,8 +545,9 @@ class MainPageService(FileHandlerMixin):
                 detail="Failed to delete gallery image"
             )
     
-    def get_gallery_images(self) -> List[ImageResponse]:
+    def get_gallery_images(self, owner_email: Optional[str]) -> List[ImageResponse]:
         """현재 갤러리 이미지 목록을 조회합니다."""
+        logger.info(f"get_gallery_images owner_email: {owner_email}")
         try:
             gallery_ids = self._repository.get_setting('gallery_image_ids')
             if not gallery_ids or not isinstance(gallery_ids, list):

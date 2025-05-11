@@ -10,7 +10,7 @@ from typing import Optional, Dict, List
 from .containers import Container
 from .services import UserService, OrderService, AuthService, MainPageService, TestNoSQLService
 from .schemas import UserResponse, OrderResponse, OrderRequest, UserRequest, AuthResponse, ImageResponse, TestDocumentCreate, TestDocumentUpdate, TestDocumentResponse
-
+from .utils.owner_utils import OwnerUtils
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 @inject
@@ -46,6 +46,14 @@ def current_user_dependency(token: str = Depends(oauth2_scheme), auth_service: A
 
 def admin_dependency(current_user = Depends(current_user_dependency), auth_service: AuthService = Depends(get_auth_service)):
     return auth_service.require_admin(current_user)
+
+async def get_owner_email(request: Request) -> Optional[str]:
+    """요청 상태에서 소유자 이메일을 추출합니다."""
+    return OwnerUtils.get_owner_email(request)
+
+async def require_owner_email(request: Request) -> str:
+    """소유자 이메일이 없으면 예외를 발생시킵니다."""
+    return OwnerUtils.require_owner_email(request)
 
 test_router = APIRouter(prefix="/test", tags=["test"])
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
@@ -167,7 +175,7 @@ async def test_owner(request: Request):
 
 @order_router.get("", response_model=list[OrderResponse])
 def get_orders(
-        order_service: OrderService = Depends(get_order_service)
+        order_service: OrderService = Depends(get_order_service),
 ) -> list[OrderResponse]:
     return order_service.get_orders()
 
@@ -259,10 +267,11 @@ def delete_gallery_image(
 ########################################################
 @main_page_router.get("/mainImage", response_model=Optional[ImageResponse])
 def get_main_image(
-    main_page_service: MainPageService = Depends(get_landing_service)
+    main_page_service: MainPageService = Depends(get_landing_service),
+    owner_email: Optional[str] = Depends(get_owner_email)   
 ):
     """현재 설정된 랜딩 페이지 메인 이미지를 조회합니다."""
-    return main_page_service.get_main_image()
+    return main_page_service.get_main_image(owner_email)
 
 @main_page_router.get("/galleryImages", response_model=List[ImageResponse])
 def get_gallery_images(
