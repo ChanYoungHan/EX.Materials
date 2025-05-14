@@ -16,6 +16,9 @@ class Image(Base):
 
     # 이미지가 특정 Order나 User에 속할 수 있도록 외래키를 추가합니다.
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
+    # 추가: owner_id 컬럼 및 관계
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    owner = relationship("User", foreign_keys=[owner_id], backref="images_owned")
 
 class User(Base):
 
@@ -28,6 +31,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     role = Column(String, default="user")
     profile_image = Column(Integer, ForeignKey("images.id"), nullable=True)
+    owner_id = Column(Integer, nullable=True)
 
     # profile_image 컬럼을 통해 한 개의 Image 객체와 연결합니다.
     profile_image_obj = relationship("Image", foreign_keys=[profile_image], uselist=False)
@@ -42,6 +46,9 @@ class Order(Base):
     # 기존의 order_image_list 컬럼은 제거합니다.
     # 대신, Image의 외래키(order_id)를 통해 역참조 관계(images)를 활용합니다.
     images = relationship("Image", backref="order", foreign_keys=[Image.order_id])
+    # 추가: owner_id 컬럼 및 관계
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    owner = relationship("User", foreign_keys=[owner_id], backref="orders_owned")
 
 
 class MainPageSetting(Base):
@@ -58,4 +65,7 @@ class MainPageSetting(Base):
     # 설정 생성/수정 시간 추적
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    # 추가: owner_id 컬럼 및 관계
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    owner = relationship("User", foreign_keys=[owner_id], backref="settings_owned")
 

@@ -2,15 +2,16 @@
 
 import asyncio
 import time
-from fastapi import APIRouter, Depends, Response, status, UploadFile, File, Query, Path, Request
+from fastapi import APIRouter, Depends, Response, status, UploadFile, File, Query, Path, Request, Header
 from dependency_injector.wiring import inject, Provide
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import Optional, Dict, List
+from typing import Optional, List
 
 from .containers import Container
 from .services import UserService, OrderService, AuthService, MainPageService, TestNoSQLService
 from .schemas import UserResponse, OrderResponse, OrderRequest, UserRequest, AuthResponse, ImageResponse, TestDocumentCreate, TestDocumentUpdate, TestDocumentResponse
 from .utils.owner_utils import OwnerUtils
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 @inject
@@ -168,6 +169,14 @@ async def test_owner(request: Request):
         "owner_email": owner_email
     }
 
+@test_router.get("/api/protected/test-ownerHeaderDefined", 
+                 summary="소유자 헤더 테스트",
+                 description="Owner 헤더를 통해 소유자 이메일을 확인하는 테스트 엔드포인트")
+async def test_owner_email(owner: str = Header(None, alias="Owner", description="소유자 이메일")):
+    return {
+        "message": "Protected endpoint",
+        "Owner": owner
+    }
 
 ########################################################
 # ORDER
@@ -275,10 +284,11 @@ def get_main_image(
 
 @main_page_router.get("/galleryImages", response_model=List[ImageResponse])
 def get_gallery_images(
-    main_page_service: MainPageService = Depends(get_landing_service)
+    main_page_service: MainPageService = Depends(get_landing_service),
+    owner_email: Optional[str] = Depends(get_owner_email)       
 ):
     """현재 설정된 랜딩 페이지 갤러리 이미지 목록을 조회합니다."""
-    return main_page_service.get_gallery_images()
+    return main_page_service.get_gallery_images(owner_email)
 
 ########################################################
 # NoSQL
