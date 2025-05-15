@@ -205,6 +205,10 @@ MongoDB 마이그레이션
 
 .. code-block:: bash
 
+   # 프로젝트 경로로 이동
+   cd migrations
+   mkdir <<migration_folder_name>>
+
    # 새 마이그레이션 파일 생성
    migrate-mongo create 마이그레이션_이름
 
