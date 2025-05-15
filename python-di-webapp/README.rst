@@ -15,7 +15,7 @@ ResearchNote
 - 2025-04-26 : NoSQL 도입
    참고 : `LinkToBlog <https://imaginemaker.notion.site/DI-template-noSQL-1e0865424aed8059b878f1f47fc8f09e?pvs=4>`_
 - 2025-05-11 : RSA암호화를 활용한 소유자 인증 시스템 추가
-   참고 : `LinkToBlog <https://imaginemaker.notion.site/DI-template-RSA-Owner-Authentication-System-1f0865424aed8014a2f9ef5be8b3a232?pvs=4>`_
+   참고 : `LinkToBlog <https://imaginemaker. .site/DI-template-RSA-Owner-Authentication-System-1f0865424aed8014a2f9ef5be8b3a232?pvs=4>`_
 
 This is a `FastAPI <https://fastapi.tiangolo.com/>`_ +
 `SQLAlchemy <https://www.sqlalchemy.org/>`_ +
@@ -188,3 +188,65 @@ Docker 환경에서:
 .. code-block:: bash
 
    docker-compose run --rm webapp alembic revision --autogenerate -m "migration_name"
+
+MongoDB 마이그레이션
+------------------
+
+이 프로젝트는 MongoDB 마이그레이션을 위해 `migrate-mongo`를 사용합니다.
+
+1. migrate-mongo 설치:
+
+.. code-block:: bash
+
+   # 전역으로 migrate-mongo 설치
+   npm install -g migrate-mongo
+
+2. 마이그레이션 파일 생성:
+
+.. code-block:: bash
+
+   # 새 마이그레이션 파일 생성
+   migrate-mongo create 마이그레이션_이름
+
+   # 예시
+   migrate-mongo create add_owner_field
+
+3. 마이그레이션 실행:
+
+.. code-block:: bash
+
+   # 모든 마이그레이션 적용
+   migrate-mongo up
+   
+   # 상태 확인
+   migrate-mongo status
+
+4. 마이그레이션 롤백:
+
+.. code-block:: bash
+
+   # 가장 최근 마이그레이션 롤백
+   migrate-mongo down
+
+5. 마이그레이션 파일 구조:
+
+마이그레이션 파일은 `versions_mongo` 디렉토리에 저장되며 다음과 같은 구조를 가집니다:
+
+.. code-block:: javascript
+
+   module.exports = {
+     async up(db) {
+       // 마이그레이션 적용 로직
+       // 예: await db.collection('users').updateMany({}, { $set: { newField: 'defaultValue' } });
+     },
+     
+     async down(db) {
+       // 롤백 로직
+       // 예: await db.collection('users').updateMany({}, { $unset: { newField: '' } });
+     }
+   };
+
+6. 설정 파일:
+
+마이그레이션 설정은 `migrations/migrate-mongo-config.js` 파일에서 관리됩니다. 
+환경에 맞게 MongoDB 연결 정보를 수정하세요.
