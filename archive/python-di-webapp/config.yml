@@ -1,0 +1,29 @@
+db:
+  # 환경 변수 DB_URL이 설정되어 있으면 해당 값을 사용하고, 없으면 기본값 사용
+  url: ${DB_URL:postgresql://postgres:postgres@localhost:5432/postgres}
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:minio.chanyoung.site}
+  access_key: ${MINIO_ACCESS_KEY:os0ReCZr0rVou3GU1vLn}
+  secret_key: ${MINIO_SECRET_KEY:4Dc78CGHiWrVHBS2AcyABVVtA6bRuy4sk11U7v4C}
+  secure: ${MINIO_SECURE:true}
+  bucket_name: ${MINIO_BUCKET_NAME:di-template}
+
+# MongoDB 설정 추가
+mongodb:
+  uri: ${MONGODB_URI:mongodb://admin:password@localhost:27017/}
+  db_name: ${MONGODB_DB_NAME:webapp_db}
+
+# 소유자 인증 관련 설정
+owner_auth:
+  keys_dir: "keys"  # 프로젝트 루트 기준 상대 경로
+  private_key_filename: "private_key.pem"  # 비밀키 파일 이름
+  public_key_filename: "public_key.pem"  # 공개키 파일 이름
+  owner_header_name: "Owner"
+  log_owner_email: true  # 개발 환경에서만 true로 설정
+  protected_paths:
+    - "/mainPage/mainImage"
+    - "/mainPage/galleryImages"
+    - "/test/api/protected/test-owner"
+    - "/test/api/protected/test-ownerHeaderDefined"
+    - "/graphql"
