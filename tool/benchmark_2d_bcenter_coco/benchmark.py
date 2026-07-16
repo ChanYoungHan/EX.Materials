@@ -6,10 +6,12 @@
   - 참고 지표: 매칭 쌍의 IoU, 검출률(matched/GT), FP 수
   - 3x3 영역별 분해 (호모그래피 증폭 불균일 대비)
 
-호환 모델:
-  - ultralytics: YOLO11, YOLO26, RT-DETR      -> --adapter ultralytics --model yolo11n.pt
-  - HuggingFace: D-FINE, RF-DETR(HF 포팅판 등) -> --adapter hf --model ustc-community/dfine-medium-coco
-  - CenterNet 등 커스텀: CustomAdapter 상속 후 predict()만 구현
+호환 모델 (확정 비교군 5개):
+  - YOLOv5n (앵커 기반, 원본 리포)  -> --adapter yolov5 --model yolov5n
+  - YOLOv5nu / YOLO11 (앵커프리)    -> --adapter ultralytics --model yolov5nu.pt | yolo11n.pt
+  - D-FINE (DETR계)                 -> --adapter hf --model ustc-community/dfine-medium-coco
+  - CenterNet 등 커스텀              -> CustomAdapter 상속 후 predict()만 구현
+  주의: ultralytics 패키지의 v5 가중치는 앵커프리 "u" 변형. 진짜 앵커 기반 v5는 yolov5 어댑터 사용.
 
 사용법:
     pip install ultralytics scipy pillow            # +transformers torch (HF 어댑터 시)
@@ -83,6 +85,32 @@ class HFAdapter(BaseAdapter):
         return out
 
 
+class YOLOv5HubAdapter(BaseAdapter):
+    """원본 앵커 기반 YOLOv5 (torch.hub, ultralytics/yolov5 리포).
+
+    주의: ultralytics 패키지의 yolov5*u.pt는 앵커프리 헤드로 교체된 변형이므로
+    앵커 기반 대조군은 반드시 이 어댑터로 실행할 것.
+      python benchmark.py --adapter yolov5 --model yolov5n
+    """
+
+    def __init__(self, model: str, conf: float):
+        import torch
+        if model.endswith(".pt"):  # 로컬 커스텀 가중치
+            self.m = torch.hub.load("ultralytics/yolov5", "custom", path=model)
+        else:                      # 사전학습 이름 (yolov5n, yolov5s, ...)
+            self.m = torch.hub.load("ultralytics/yolov5", model, pretrained=True)
+        self.m.conf = conf
+        self.names = self.m.names
+
+    def predict(self, image_path):
+        res = self.m(image_path)
+        out = []
+        for x1, y1, x2, y2, conf, cls in res.xyxy[0].tolist():
+            out.append(dict(name=self.names[int(cls)], conf=float(conf),
+                            x1=x1, y1=y1, x2=x2, y2=y2))
+        return out
+
+
 class CustomAdapter(BaseAdapter):
     """CenterNet 등 자체 모델용 템플릿. predict()만 구현하면 된다.
 
@@ -95,7 +123,8 @@ class CustomAdapter(BaseAdapter):
         raise NotImplementedError("CustomAdapter.predict()를 구현하세요")
 
 
-ADAPTERS = {"ultralytics": UltralyticsAdapter, "hf": HFAdapter, "custom": CustomAdapter}
+ADAPTERS = {"ultralytics": UltralyticsAdapter, "hf": HFAdapter,
+            "yolov5": YOLOv5HubAdapter, "custom": CustomAdapter}
 
 
 # ---------------------------------------------------------------- metrics

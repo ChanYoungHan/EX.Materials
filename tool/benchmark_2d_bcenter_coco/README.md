@@ -15,14 +15,17 @@ python download_coco.py --root ./data
 # 2. 필터 (기본: sqrt(bbox면적) 32~96px) + 해당 이미지만 다운로드
 python filter_coco.py --root ./data --download-images
 
-# 3. 벤치마크
+# 3. 벤치마크 — 확정 비교군 5개
+python benchmark.py --adapter yolov5 --model yolov5n                      # YOLOv5n (앵커 기반, torch.hub)
+python benchmark.py --model yolov5nu.pt                                   # YOLOv5nu (v5 백본 + 앵커프리 헤드)
 python benchmark.py --model yolo11n.pt                                    # YOLO11
-python benchmark.py --model yolo26n.pt                                    # YOLO26
-python benchmark.py --model rtdetr-l.pt                                   # RT-DETR
 python benchmark.py --adapter hf --model ustc-community/dfine-medium-coco # D-FINE
+# CenterNet: CustomAdapter.predict() 구현 후 --adapter custom
 ```
 
-CenterNet 등 자체 모델은 `benchmark.py`의 `CustomAdapter.predict()`만 구현하면 된다.
+주의: ultralytics 패키지의 v5 가중치(`yolov5nu.pt`)는 앵커프리 "u" 변형이다.
+앵커 기반 대조군은 반드시 `--adapter yolov5`(원본 리포, torch.hub)로 실행할 것.
+yolov5n vs yolov5nu는 동일 백본에서 앵커 유무만 다른 단일 변인 쌍이다.
 
 ## 출력 지표
 
