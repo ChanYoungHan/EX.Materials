@@ -1,0 +1,4 @@
+data/
+result_*.json
+__pycache__/
+*.pt
