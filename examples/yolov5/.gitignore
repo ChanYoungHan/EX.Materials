@@ -1,0 +1,31 @@
+# ── 모델 산출물 ──────────────────────────────────────────────
+# export.py가 --weights와 같은 디렉터리에 만든다. 재생성 가능하고 수십 MB라 추적하지 않는다.
+# 재현에 필요한 정보는 manifest가 아니라 export_onnx.sh의 인자와 repo commit이다.
+*.onnx
+*.onnx.data
+*.engine
+*.torchscript
+*.mlmodel
+*.mlpackage
+*.tflite
+*.pb
+*_openvino_model/
+*_saved_model/
+*_web_model/
+*_paddle_model/
+
+# manifest는 .onnx에 종속된 파일이므로 함께 제외
+*.manifest.json
+
+# ── 가중치 ──────────────────────────────────────────────────
+# 공개 릴리스에서 언제든 다시 받을 수 있다. 리포에 넣으면 clone이 무거워진다.
+*.pt
+
+# ── 실행 결과 ────────────────────────────────────────────────
+runs/
+
+# ── 파이썬 ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
