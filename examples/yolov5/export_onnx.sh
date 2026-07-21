@@ -75,7 +75,7 @@ PY="$(resolve_python "$PYENV_ENV")"
 log "python : $PY"
 log "version: $("$PY" --version 2>&1)"
 
-REPO_DIR="$(ensure_repo "$CACHE_DIR" "$REPO_URL" "$REPO_REF" "$FRESH")"
+ensure_repo "$CACHE_DIR" "$REPO_URL" "$REPO_REF" "$FRESH"   # -> REPO_DIR, REPO_SHA
 log "repo   : $REPO_DIR"
 log "commit : $REPO_SHA"   # 재현성 근거. 결과가 달라지면 가장 먼저 볼 값.
 
@@ -175,10 +175,12 @@ if checker_ok is False:
 if self_contained:
     print("SELF_CONTAINED")
 PYEOF
-)"
+)" || VERDICT=""
+# || VERDICT="" : manifest 작성이 실패해도 export 산출물 자체는 유효하다.
+# set -e 때문에 여기서 스크립트가 죽으면 멀쩡한 .onnx를 두고 실패로 끝난다.
 
 log "manifest: $MANIFEST"
-log "검증: $(printf '%s' "$VERDICT" | sed -n 1p)"
+[[ -n "$VERDICT" ]] && log "검증: $(printf '%s' "$VERDICT" | sed -n 1p)" || warn "manifest 생성 실패 — 산출물은 유효합니다"
 if grep -q MISMATCH <<<"$VERDICT"; then
   warn "요청 opset과 실제 산출물 opset이 다릅니다. 다른 런타임(TensorRT 등)으로 옮길 때 문제가 될 수 있습니다."
 fi

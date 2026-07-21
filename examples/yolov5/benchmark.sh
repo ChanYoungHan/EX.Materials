@@ -83,7 +83,8 @@ N_IMAGES="$(find "$DATA_DIR" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -in
 # ------------------------------------------------------------------ 환경 준비
 PY="$(resolve_python "$PYENV_ENV")"
 log "python : $PY"
-REPO_DIR="$(ensure_repo "$CACHE_DIR" "$REPO_URL" "$REPO_REF" "$FRESH")"
+ensure_repo "$CACHE_DIR" "$REPO_URL" "$REPO_REF" "$FRESH"   # -> REPO_DIR, REPO_SHA
+log "repo   : $REPO_DIR"
 log "commit : $REPO_SHA"
 ensure_deps "$PY" "$REPO_DIR" "$PYENV_ENV" "$SKIP_DEPS" onnx onnxruntime
 

@@ -29,7 +29,11 @@ resolve_python() {
 }
 
 # ensure_repo <캐시디렉터리> <url> <ref> <fresh 0|1>
-# 성공 시 레포 경로를 stdout으로, 커밋 SHA를 전역 REPO_SHA로 반환한다.
+#
+# 결과를 stdout이 아니라 전역 변수 REPO_DIR / REPO_SHA로 돌려준다.
+# stdout으로 넘기면 호출부가 REPO_DIR="$(ensure_repo ...)" 형태를 쓰게 되는데,
+# 명령 치환은 서브셸이라 함수가 설정한 다른 전역(REPO_SHA)이 부모에 전달되지 않는다.
+# 반환 경로를 하나로 통일해 그 함정을 없앤다.
 ensure_repo() {
   local cache="$1" url="$2" ref="$3" fresh="$4"
   local dir="${cache}/yolov5"
@@ -41,16 +45,18 @@ ensure_repo() {
   fi
 
   if [[ -d "${dir}/.git" ]]; then
-    git -C "$dir" fetch --quiet --depth 1 origin "$ref"
-    git -C "$dir" checkout --quiet FETCH_HEAD
+    git -C "$dir" fetch --quiet --depth 1 origin "$ref" || die "fetch 실패: $ref"
+    git -C "$dir" checkout --quiet FETCH_HEAD || die "checkout 실패"
   else
     mkdir -p "$cache"
     git clone --quiet --depth 1 --branch "$ref" "$url" "$dir" 2>/dev/null \
-      || git clone --quiet --depth 1 "$url" "$dir"
+      || git clone --quiet --depth 1 "$url" "$dir" \
+      || die "클론 실패: $url"
   fi
 
+  REPO_DIR="$(git -C "$dir" rev-parse --show-toplevel)"
   REPO_SHA="$(git -C "$dir" rev-parse HEAD)"
-  printf '%s' "$dir"
+  [[ -n "$REPO_SHA" ]] || die "커밋 SHA를 읽지 못했습니다: $dir"
 }
 
 # ensure_deps <python> <레포디렉터리> <환경명> <skip 0|1> [추가패키지...]
