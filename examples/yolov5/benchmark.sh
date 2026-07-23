@@ -2,22 +2,35 @@
 #
 # 단일 런타임 벤치마크 — 7.17 저널 매트릭(속도·자원·정확도·부가)
 #
-# 한 번에 하나의 런타임만 측정한다. 결과는 result_<runtime>.json 한 개로 떨어지고,
-# bench_report.py가 여러 런타임의 result를 모아 비교표를 만든다. 이 구조라면
-# "GPU 서버에서 onnx, 노트북에서 pytorch"처럼 따로 돌린 결과도 나중에 합칠 수 있다.
+# 한 번에 하나의 런타임만 측정한다. 결과는 result_<runtime>.json 한 개로 떨어진다.
+# 런타임끼리 비교(onnx vs pytorch)는 이 JSON들을 그대로 놓고 보거나 LLM에 넘겨 정리한다
+# — 별도 리포트 코드를 두지 않는다. 이 구조라면 "GPU 서버에서 onnx, 노트북에서 pytorch"
+# 처럼 따로 돌린 결과도 result JSON만 모으면 된다.
 #
 # 측정 자체는 레퍼런스가 한다:
-#   속도·자원 : detect.py (이미지 폴더) + 프로세스 자원 폴링
-#   정확도    : val.py --save-json (라벨 데이터셋 있을 때, pycocotools mAP)
+#   속도    : detect.py (val2017 이미지) — 이미지별 추론시간
+#   정확도  : val.py — YOLO 라벨로 native mAP
+#
+# 파이프라인:
+#   detect.py/val.py → 로그
+#     → bench_run.py  : 로그 → <runtime>_latency.csv(원본) + result JSON(통계 제외)
+#     → bench_stats.py: CSV → 추론시간 통계 → result JSON의 speed에 병합
+# 원본(5000행 CSV)과 통계를 분리해, 워밍업만 바꿔 재집계할 때 재추론이 필요 없다.
+# (자원 모니터링은 추후 순차 도입.)
+#
+# 기준 포맷은 YOLO다. 이미지 + YOLO .txt 라벨이 필수이며, 없으면 실패한다.
+# 소형객체 APs(pycocotools)는 COCO json이 필요해 지금은 미구현이다 — 데이터셋을 직접
+# 생산·관리하는 시점에 케이스 A(COCO json 경로)로 확장한다. 아래 "추후개발" 주석 참조.
+#
+# 데이터셋 레이아웃 (yolov5 규약):
+#   <dataset-dir>/images/val2017/*.jpg   (또는 <dataset-dir>/val2017/*.jpg)
+#   <dataset-dir>/labels/val2017/*.txt   [필수] YOLO 라벨 — native mAP
+#   <dataset-dir>/val2017.txt            (없으면 자동 생성)
 #
 # 사용법:
-#   ./benchmark.sh --runtime pytorch --data-dir ./images
-#   ./benchmark.sh --runtime onnx    --data-dir ./images --data-yaml ./datasets/coco.yaml
-#   ./benchmark.sh --runtime onnx    --data-dir ./val2017 --device 0
-#   # 두 런타임을 같은 폴더에 모으면 리포트가 자동 비교:
-#   ./benchmark.sh --runtime pytorch --data-dir ./img --name run1
-#   ./benchmark.sh --runtime onnx    --data-dir ./img --name run1   # 같은 --name
-#   python bench_report.py --result-dir runs/onnx_bench/run1
+#   ./benchmark.sh --runtime pytorch --dataset-dir ./datasets/coco --name run1
+#   ./benchmark.sh --runtime onnx    --dataset-dir ./datasets/coco --name run1 --device 0
+#   # 두 result_*.json 을 비교: runs/onnx_bench/run1/ 의 JSON을 열어보거나 LLM에 전달
 #
 set -euo pipefail
 
@@ -34,8 +47,7 @@ CACHE_DIR="${TMPDIR:-/tmp}/yolov5-export"
 RUNTIME=""
 PT_WEIGHTS="${HERE}/yolov5s.pt"
 ONNX_WEIGHTS="${HERE}/yolov5s.onnx"
-DATA_DIR=""
-DATA_YAML=""
+DATASET_DIR=""
 IMGSZ=640
 DEVICE="cpu"
 CONF=0.25
@@ -54,8 +66,7 @@ while [[ $# -gt 0 ]]; do
     --ref)       REPO_REF="$2"; shift 2 ;;
     --pt)        PT_WEIGHTS="$2"; shift 2 ;;
     --onnx)      ONNX_WEIGHTS="$2"; shift 2 ;;
-    --data-dir)  DATA_DIR="$2"; shift 2 ;;
-    --data-yaml) DATA_YAML="$2"; shift 2 ;;
+    --dataset-dir|--coco-dir) DATASET_DIR="$2"; shift 2 ;;
     --imgsz)     IMGSZ="$2"; shift 2 ;;
     --device)    DEVICE="$2"; shift 2 ;;
     --conf)      CONF="$2"; shift 2 ;;
@@ -67,7 +78,7 @@ while [[ $# -gt 0 ]]; do
     --cache-dir) CACHE_DIR="$2"; shift 2 ;;
     --fresh)     FRESH=1; shift ;;
     --skip-deps) SKIP_DEPS=1; shift ;;
-    -h|--help)   sed -n '2,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)   sed -n '2,34p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *)           die "알 수 없는 인자: $1" ;;
   esac
 done
@@ -81,18 +92,32 @@ case "$RUNTIME" in
 esac
 [[ -f "$WEIGHTS" ]] || die "가중치 없음: $WEIGHTS  ${RUNTIME}=onnx 라면 먼저 ./export_onnx.sh 실행"
 
-# 데이터셋 필수 — 준비 전 실행으로 의미 없는 숫자를 얻는 상황을 막는다.
-[[ -n "$DATA_DIR" ]] || die "--data-dir 가 필요합니다. 속도 측정용 이미지 디렉터리를 지정하세요."
-[[ -d "$DATA_DIR" ]] || die "데이터 디렉터리 없음: $DATA_DIR"
-DATA_DIR="$(cd "$DATA_DIR" && pwd)"
-N_IMAGES="$(find "$DATA_DIR" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \
-             -o -iname '*.bmp' -o -iname '*.webp' \) | wc -l | tr -d ' ')"
+# --- 데이터셋 검증 (기준 포맷: YOLO) ---
+# 이미지 + YOLO .txt 라벨이 필수. 둘 중 하나라도 없으면 실패한다.
+[[ -n "$DATASET_DIR" ]] || die "--dataset-dir 가 필요합니다 (val2017 데이터셋 루트)."
+[[ -d "$DATASET_DIR" ]] || die "디렉터리 없음: $DATASET_DIR"
+DATASET_DIR="$(cd "$DATASET_DIR" && pwd)"
+
+# 이미지 폴더: yolov5 다운로드는 images/val2017.
+IMG_DIR=""
+for cand in "${DATASET_DIR}/images/val2017"; do
+  [[ -d "$cand" ]] && IMG_DIR="$cand" && break
+done
+[[ -n "$IMG_DIR" ]] || die "val2017 이미지를 찾지 못했습니다: ${DATASET_DIR}/images/val2017"
+N_IMAGES="$(find "$IMG_DIR" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | wc -l | tr -d ' ')"
 [[ "$N_IMAGES" -gt "$WARMUP" ]] || die "이미지가 ${N_IMAGES}장뿐입니다. 워밍업 ${WARMUP}장을 버리면 표본이 없습니다."
 
-if [[ -n "$DATA_YAML" ]]; then
-  [[ -f "$DATA_YAML" ]] || die "데이터셋 yaml 없음: $DATA_YAML"
-  DATA_YAML="$(cd "$(dirname "$DATA_YAML")" && pwd)/$(basename "$DATA_YAML")"
-fi
+# YOLO 라벨: 정확도(native mAP)의 필수 입력. 없으면 실패한다(케이스 C 차단).
+LABEL_DIR="${DATASET_DIR}/labels/val2017"
+[[ -d "$LABEL_DIR" ]] && [[ -n "$(find "$LABEL_DIR" -name '*.txt' -print -quit)" ]] \
+  || die "YOLO 라벨 없음: ${LABEL_DIR}
+  정확도 측정에 YOLO .txt 라벨이 필요합니다. (구조는 --help 참조)"
+
+# ── 추후개발: 케이스 A (COCO json → pycocotools 소형객체 APs) ──────────────
+# COCO_JSON="${DATASET_DIR}/annotations/instances_val2017.json" 이 존재하면
+# val.py에 --save-json을 붙여 pycocotools APs를 추가로 얻는다. is_coco 정확도를
+# 위해 데이터셋 루트명이 'coco'여야 한다(val.py의 80→91 클래스 매핑 조건).
+# 지금은 케이스 B(native mAP)만 지원한다.
 
 WEIGHTS="$(cd "$(dirname "$WEIGHTS")" && pwd)/$(basename "$WEIGHTS")"
 
@@ -102,29 +127,97 @@ log "python : $PY"
 log "runtime: $RUNTIME  ($WEIGHTS)"
 ensure_repo "$CACHE_DIR" "$REPO_URL" "$REPO_REF" "$FRESH"   # -> REPO_DIR, REPO_SHA
 log "commit : $REPO_SHA"
-# psutil/pynvml: 자원 샘플러용. pynvml은 GPU 없으면 조용히 비활성되므로 CPU 환경에서도 무해.
-ensure_deps "$PY" "$REPO_DIR" "$PYENV_ENV" "$SKIP_DEPS" onnx onnxruntime psutil pynvml pycocotools
+# onnx/onnxruntime: onnx 런타임 추론용. (native mAP는 pycocotools 불필요 —
+# 케이스 A 도입 시 여기에 pycocotools 추가.)
+ensure_deps "$PY" "$REPO_DIR" "$PYENV_ENV" "$SKIP_DEPS" onnx onnxruntime
 
 # ------------------------------------------------------------------ 실행
 OUTDIR="${PROJECT}/${NAME}"
 mkdir -p "$OUTDIR"
 log "출력   : $OUTDIR"
-[[ -n "$DATA_YAML" ]] && log "정확도 : $DATA_YAML" || warn "정확도 생략 (--data-yaml 미지정)"
+log "데이터 : $DATASET_DIR (val2017 ${N_IMAGES}장)"
+log "정확도 : YOLO 라벨 native mAP (APs는 추후개발)"
 
+# val.py용 yaml 자동 도출. 레포의 표준 data/coco.yaml에서 path만 이 데이터셋으로 바꿔
+# 출력 디렉터리에 생성한다(클래스 이름 80개 하드코딩 대신 레퍼런스 재사용).
+#
+# 파일명을 coco.yaml로 두지 않는다: val.py는 --data가 'coco.yaml'로 끝나면 --save-json을
+# 강제로 켜서 COCO json이 없어도 pycocotools를 시도한다. json 유무를 우리가 제어하려면
+# 이 자동 트리거를 피해야 한다.
+if [[ -f "${REPO_DIR}/data/coco.yaml" ]]; then
+  DATA_YAML="${OUTDIR}/bench_data.yaml"
+  "$PY" - "${REPO_DIR}/data/coco.yaml" "$DATASET_DIR" "$DATA_YAML" <<'PYEOF'
+import re, sys, pathlib
+src, root, dst = sys.argv[1:4]
+lines, done = [], False
+for ln in pathlib.Path(src).read_text().splitlines():
+    if re.match(r"^\s*path\s*:", ln):
+        lines.append(f"path: {root}  # benchmark.sh가 --dataset-dir로 덮어씀"); done = True
+    else:
+        lines.append(ln)
+if not done:
+    lines.insert(0, f"path: {root}")
+pathlib.Path(dst).write_text("\n".join(lines) + "\n")
+PYEOF
+  log "yaml   : $DATA_YAML (레포 data/coco.yaml에서 생성)"
+else
+  die "레포에 data/coco.yaml 이 없습니다: ${REPO_DIR}/data/coco.yaml"
+fi
+
+# val2017.txt (val 이미지 목록) — val.py의 dataloader가 요구. 없으면 생성한다.
+if [[ ! -f "${DATASET_DIR}/val2017.txt" ]]; then
+  warn "val2017.txt 없음 — 이미지 목록을 ${OUTDIR}/val2017.txt 로 생성합니다."
+  find "$IMG_DIR" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | sort > "${OUTDIR}/val2017.txt"
+  "$PY" - "$DATA_YAML" "${OUTDIR}/val2017.txt" <<'PYEOF'
+import re, sys, pathlib
+yaml_path, vallist = sys.argv[1:3]
+p = pathlib.Path(yaml_path)
+lines = [re.sub(r"^(\s*val\s*:).*", rf"\1 {vallist}", ln) for ln in p.read_text().splitlines()]
+p.write_text("\n".join(lines) + "\n")
+PYEOF
+fi
+
+# --- 속도: detect.py 직접 실행 → 로그 ---
+DETECT_LOG="${OUTDIR}/${RUNTIME}_detect.log"
+log "속도   : detect.py 실행 ($RUNTIME)"
+( cd "$REPO_DIR" && "$PY" detect.py \
+    --weights "$WEIGHTS" --source "$IMG_DIR" \
+    --imgsz "$IMGSZ" "$IMGSZ" --device "$DEVICE" \
+    --conf-thres "$CONF" --iou-thres "$IOU" \
+    --project "$OUTDIR" --name "${RUNTIME}_detect" --exist-ok --nosave ) \
+  > "$DETECT_LOG" 2>&1 || { tail -20 "$DETECT_LOG"; die "detect.py 실패 — $DETECT_LOG"; }
+
+# --- 정확도: val.py 직접 실행 → 로그 (라벨은 필수라 항상 실행) ---
+# 추후개발(케이스 A): COCO json이 있으면 여기 val.py에 --save-json을 추가해 pycocotools
+# APs를 얻는다. 지금은 native mAP만.
+VAL_LOG="${OUTDIR}/${RUNTIME}_val.log"
+log "정확도 : val.py 실행 ($RUNTIME)"
+( cd "$REPO_DIR" && "$PY" val.py \
+    --weights "$WEIGHTS" --data "$DATA_YAML" \
+    --imgsz "$IMGSZ" --device "$DEVICE" \
+    --project "$OUTDIR" --name "${RUNTIME}_val" --exist-ok --verbose ) \
+  > "$VAL_LOG" 2>&1 || warn "val.py 실패 — $VAL_LOG (정확도 없이 진행)"
+
+# --- 로그 파싱 → 원본 CSV + result JSON (통계 제외) ---
 "$PY" "${HERE}/bench_run.py" \
   --runtime "$RUNTIME" \
   --weights "$WEIGHTS" \
-  --repo "$REPO_DIR" \
-  --python "$PY" \
-  --data-dir "$DATA_DIR" \
-  ${DATA_YAML:+--data-yaml "$DATA_YAML"} \
+  --detect-log "$DETECT_LOG" \
+  --val-log "$VAL_LOG" \
   --commit "$REPO_SHA" \
   --imgsz "$IMGSZ" \
   --device "$DEVICE" \
   --conf "$CONF" \
   --iou "$IOU" \
-  --warmup "$WARMUP" \
   --target-class "$TARGET_CLASS" \
   --out "$OUTDIR"
 
-log "리포트 : python bench_report.py --result-dir $OUTDIR"
+# --- 원본 CSV → 추론시간 통계 → result JSON에 병합 ---
+"$PY" "${HERE}/bench_stats.py" \
+  --csv "${OUTDIR}/${RUNTIME}_latency.csv" \
+  --result "${OUTDIR}/result_${RUNTIME}.json" \
+  --warmup "$WARMUP"
+
+log "완료   : ${OUTDIR}/result_${RUNTIME}.json  (원본: ${RUNTIME}_latency.csv)"
+log "비교   : 같은 폴더의 result_*.json 을 열어보거나 LLM에 넘겨 정리"
+log "재집계 : python bench_stats.py --csv ${OUTDIR}/${RUNTIME}_latency.csv --result ... --warmup N"
