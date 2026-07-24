@@ -30,7 +30,11 @@
 # 사용법:
 #   ./benchmark.sh --runtime pytorch --dataset-dir ./datasets/coco --name run1
 #   ./benchmark.sh --runtime onnx    --dataset-dir ./datasets/coco --name run1 --device 0
-#   # 두 result_*.json 을 비교: runs/onnx_bench/run1/ 의 JSON을 열어보거나 LLM에 전달
+#   ./benchmark.sh ... --no-usage                                                # 자원 로그 끔
+#   # 두 result_*.json 을 비교: runs/bench_coco/run1/ 의 JSON을 열어보거나 LLM에 전달
+#
+# 자원 로그: 각 phase(detect/val)의 python PID를 잡아 pidstat으로 추적 → usage_<runtime>.log
+#            (sysstat 필요. 없으면 자동 생략.)
 #
 set -euo pipefail
 
@@ -54,10 +58,11 @@ CONF=0.25
 IOU=0.45
 WARMUP=3
 TARGET_CLASS="car"
-PROJECT="${HERE}/runs/onnx_bench"
+PROJECT="${HERE}/runs/bench_coco"
 NAME="exp"
 FRESH=0
 SKIP_DEPS=0
+USAGE=1         # 자원 로그(pidstat) on. --no-usage로 끔.
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -78,7 +83,8 @@ while [[ $# -gt 0 ]]; do
     --cache-dir) CACHE_DIR="$2"; shift 2 ;;
     --fresh)     FRESH=1; shift ;;
     --skip-deps) SKIP_DEPS=1; shift ;;
-    -h|--help)   sed -n '2,34p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    --no-usage)  USAGE=0; shift ;;
+    -h|--help)   sed -n '2,37p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *)           die "알 수 없는 인자: $1" ;;
   esac
 done
@@ -177,26 +183,55 @@ p.write_text("\n".join(lines) + "\n")
 PYEOF
 fi
 
-# --- 속도: detect.py 직접 실행 → 로그 ---
+# run_phase <phase명> <출력로그> -- <python 인자...>
+#
+# 레퍼런스 스크립트(detect.py/val.py)를 백그라운드로 띄워 그 PID를 잡고, pidstat으로
+# 그 PID만 추적해 자원 로그를 남긴다. 서브셸에서 exec로 python을 실행하므로 $!(서브셸 PID)이
+# 곧 python PID가 된다 — 별도 조회 없이 정확한 PID를 얻는 방법이다.
+# 자원 로그는 그 메인 프로세스(추론 스레드 포함)만 잡는다. dataloader 워커(별도 PID)는 제외.
+run_phase() {
+  local phase="$1" logf="$2"; shift 2   # 나머지 = python + 인자
+  ( cd "$REPO_DIR" && exec "$@" ) > "$logf" 2>&1 &
+  local pid=$! mon=""
+
+  if [[ $USAGE -eq 1 ]] && command -v pidstat >/dev/null 2>&1; then
+    { echo "### phase=$phase pid=$pid $(date '+%H:%M:%S')"
+      pidstat -u -r -h -p "$pid" 1; } >> "$USAGE_LOG" 2>&1 &
+    mon=$!
+  fi
+
+  wait "$pid"; local rc=$?
+  [[ -n "$mon" ]] && { kill "$mon" 2>/dev/null; wait "$mon" 2>/dev/null; }
+  return $rc
+}
+
+USAGE_LOG="${OUTDIR}/usage_${RUNTIME}.log"
+: > "$USAGE_LOG"   # 실행마다 새로 시작
+if [[ $USAGE -eq 1 ]] && ! command -v pidstat >/dev/null 2>&1; then
+  warn "pidstat 없음(sysstat 미설치) — 자원 로그를 건너뜁니다. 설치: apt install sysstat"
+fi
+
+# --- 속도: detect.py 실행 (+ 자원 추적) ---
 DETECT_LOG="${OUTDIR}/${RUNTIME}_detect.log"
 log "속도   : detect.py 실행 ($RUNTIME)"
-( cd "$REPO_DIR" && "$PY" detect.py \
+run_phase detect "$DETECT_LOG" "$PY" detect.py \
     --weights "$WEIGHTS" --source "$IMG_DIR" \
     --imgsz "$IMGSZ" "$IMGSZ" --device "$DEVICE" \
     --conf-thres "$CONF" --iou-thres "$IOU" \
-    --project "$OUTDIR" --name "${RUNTIME}_detect" --exist-ok --nosave ) \
-  > "$DETECT_LOG" 2>&1 || { tail -20 "$DETECT_LOG"; die "detect.py 실패 — $DETECT_LOG"; }
+    --project "$OUTDIR" --name "${RUNTIME}_detect" --exist-ok --nosave \
+  || { tail -20 "$DETECT_LOG"; die "detect.py 실패 — $DETECT_LOG"; }
 
-# --- 정확도: val.py 직접 실행 → 로그 (라벨은 필수라 항상 실행) ---
-# 추후개발(케이스 A): COCO json이 있으면 여기 val.py에 --save-json을 추가해 pycocotools
-# APs를 얻는다. 지금은 native mAP만.
+# --- 정확도: val.py 실행 (+ 자원 추적) ---
+# 추후개발(케이스 A): COCO json이 있으면 val.py에 --save-json을 추가해 pycocotools APs를 얻는다.
 VAL_LOG="${OUTDIR}/${RUNTIME}_val.log"
 log "정확도 : val.py 실행 ($RUNTIME)"
-( cd "$REPO_DIR" && "$PY" val.py \
+run_phase val "$VAL_LOG" "$PY" val.py \
     --weights "$WEIGHTS" --data "$DATA_YAML" \
     --imgsz "$IMGSZ" --device "$DEVICE" \
-    --project "$OUTDIR" --name "${RUNTIME}_val" --exist-ok --verbose ) \
-  > "$VAL_LOG" 2>&1 || warn "val.py 실패 — $VAL_LOG (정확도 없이 진행)"
+    --project "$OUTDIR" --name "${RUNTIME}_val" --exist-ok --verbose \
+  || warn "val.py 실패 — $VAL_LOG (정확도 없이 진행)"
+
+[[ $USAGE -eq 1 ]] && command -v pidstat >/dev/null 2>&1 && log "자원   : $USAGE_LOG"
 
 # --- 로그 파싱 → 원본 CSV + result JSON (통계 제외) ---
 "$PY" "${HERE}/bench_run.py" \

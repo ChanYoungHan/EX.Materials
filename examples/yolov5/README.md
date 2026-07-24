@@ -86,7 +86,7 @@ python -c "from utils.general import download; \
 # GPU: --device 0
 ```
 
-각 실행이 `runs/onnx_bench/run1/` 아래에 남기는 것:
+각 실행이 `runs/bench_coco/run1/` 아래에 남기는 것:
 
 | 파일 | 내용 |
 |---|---|
@@ -125,8 +125,8 @@ val.py (native mAP)          ┘        └→ bench_stats.py (CSV → 통계 �
 워밍업 개수만 바꿔 통계를 다시 낼 때는 CSV만 다시 읽으면 된다.
 
 ```bash
-python bench_stats.py --csv runs/onnx_bench/run1/onnx_latency.csv \
-                      --result runs/onnx_bench/run1/result_onnx.json --warmup 50
+python bench_stats.py --csv runs/bench_coco/run1/onnx_latency.csv \
+                      --result runs/bench_coco/run1/result_onnx.json --warmup 50
 ```
 
 ---
