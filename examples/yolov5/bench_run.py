@@ -101,9 +101,10 @@ def main(a):
     else:
         accuracy = {"status": "skipped", "reason": "YOLO 라벨 미제공 (정확도 측정 불가)"}
 
+    engine_name = {"pytorch": "PyTorch", "onnx": "ONNX Runtime", "trt": "TensorRT"}
     result = {
         "runtime": a.runtime,
-        "engine": "PyTorch" if a.runtime == "pytorch" else "ONNX Runtime",
+        "engine": engine_name.get(a.runtime, a.runtime),
         "weights": str(weights),
         "repo_commit": a.commit,
         "config": {
@@ -126,7 +127,7 @@ def main(a):
 
 def parse_args():
     p = argparse.ArgumentParser(description="detect.py/val.py 로그 → 원본 CSV + result JSON")
-    p.add_argument("--runtime", choices=["pytorch", "onnx"], required=True)
+    p.add_argument("--runtime", choices=["pytorch", "onnx", "trt"], required=True)
     p.add_argument("--weights", required=True)
     p.add_argument("--detect-log", required=True, help="detect.py 출력 로그 (속도 원본)")
     p.add_argument("--val-log", default=None, help="val.py 출력 로그 (정확도, 없으면 생략)")

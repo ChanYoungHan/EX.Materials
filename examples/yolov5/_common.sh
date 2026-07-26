@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# export_onnx.sh / benchmark.sh 공통 유틸.
+# export.sh / benchmark.sh 공통 유틸.
 # 단독 실행하지 않고 source로 읽어들인다.
 #
 # pyenv 해석과 레포 클론 로직을 한 곳에 둔다. 두 스크립트가 같은 python·같은 커밋을

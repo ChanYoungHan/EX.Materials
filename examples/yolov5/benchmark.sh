@@ -27,11 +27,15 @@
 #   <dataset-dir>/labels/val2017/*.txt   [필수] YOLO 라벨 — native mAP
 #   <dataset-dir>/val2017.txt            (없으면 자동 생성)
 #
+# 런타임: --runtime pytorch|onnx|trt  (각각 .pt / .onnx / .engine)
+#   trt는 GPU(Jetson) 전용이며, 그 기기에서 export.sh로 빌드한 .engine이어야 한다.
+#
 # 사용법:
 #   ./benchmark.sh --runtime pytorch --dataset-dir ./datasets/coco --name run1
 #   ./benchmark.sh --runtime onnx    --dataset-dir ./datasets/coco --name run1 --device 0
+#   ./benchmark.sh --runtime trt     --dataset-dir ./datasets/coco --name run1  # Jetson
 #   ./benchmark.sh ... --no-usage                                                # 자원 로그 끔
-#   # 두 result_*.json 을 비교: runs/bench_coco/run1/ 의 JSON을 열어보거나 LLM에 전달
+#   # result_*.json 을 비교: runs/bench_coco/run1/ 의 JSON을 열어보거나 LLM에 전달
 #
 # 자원 로그: 각 phase(detect/val)의 python PID를 잡아 pidstat으로 추적 → usage_<runtime>.log
 #            (sysstat 필요. 없으면 자동 생략.)
@@ -51,6 +55,7 @@ CACHE_DIR="${TMPDIR:-/tmp}/yolov5-export"
 RUNTIME=""
 PT_WEIGHTS="${HERE}/yolov5s.pt"
 ONNX_WEIGHTS="${HERE}/yolov5s.onnx"
+TRT_WEIGHTS="${HERE}/yolov5s.engine"
 DATASET_DIR=""
 IMGSZ=640
 DEVICE="cpu"
@@ -71,6 +76,7 @@ while [[ $# -gt 0 ]]; do
     --ref)       REPO_REF="$2"; shift 2 ;;
     --pt)        PT_WEIGHTS="$2"; shift 2 ;;
     --onnx)      ONNX_WEIGHTS="$2"; shift 2 ;;
+    --engine)    TRT_WEIGHTS="$2"; shift 2 ;;
     --dataset-dir|--coco-dir) DATASET_DIR="$2"; shift 2 ;;
     --imgsz)     IMGSZ="$2"; shift 2 ;;
     --device)    DEVICE="$2"; shift 2 ;;
@@ -84,7 +90,7 @@ while [[ $# -gt 0 ]]; do
     --fresh)     FRESH=1; shift ;;
     --skip-deps) SKIP_DEPS=1; shift ;;
     --no-usage)  USAGE=0; shift ;;
-    -h|--help)   sed -n '2,37p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)   sed -n '2,41p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *)           die "알 수 없는 인자: $1" ;;
   esac
 done
@@ -93,10 +99,18 @@ done
 case "$RUNTIME" in
   pytorch) WEIGHTS="$PT_WEIGHTS" ;;
   onnx)    WEIGHTS="$ONNX_WEIGHTS" ;;
-  "")      die "--runtime 가 필요합니다. pytorch 또는 onnx 를 지정하세요." ;;
-  *)       die "알 수 없는 런타임: $RUNTIME (pytorch|onnx)" ;;
+  trt)     WEIGHTS="$TRT_WEIGHTS" ;;
+  "")      die "--runtime 가 필요합니다. pytorch | onnx | trt 를 지정하세요." ;;
+  *)       die "알 수 없는 런타임: $RUNTIME (pytorch|onnx|trt)" ;;
 esac
-[[ -f "$WEIGHTS" ]] || die "가중치 없음: $WEIGHTS  ${RUNTIME}=onnx 라면 먼저 ./export_onnx.sh 실행"
+[[ -f "$WEIGHTS" ]] || die "가중치 없음: $WEIGHTS  ($RUNTIME 는 먼저 ./export.sh 로 생성)"
+
+# TensorRT 엔진은 GPU 전용이고, 빌드한 그 기기(Jetson)에서만 동작한다.
+# device가 cpu면 DetectMultiBackend가 어차피 cuda:0으로 강제하므로, 미리 0으로 맞춰준다.
+if [[ "$RUNTIME" == "trt" ]]; then
+  [[ "$DEVICE" == "cpu" ]] && { warn "trt는 GPU 전용 — --device 0 으로 설정합니다."; DEVICE="0"; }
+  warn "이 .engine이 지금 이 기기에서 빌드된 것인지 확인하세요(다른 기기 엔진은 로드 실패)."
+fi
 
 # --- 데이터셋 검증 (기준 포맷: YOLO) ---
 # 이미지 + YOLO .txt 라벨이 필수. 둘 중 하나라도 없으면 실패한다.
@@ -133,9 +147,13 @@ log "python : $PY"
 log "runtime: $RUNTIME  ($WEIGHTS)"
 ensure_repo "$CACHE_DIR" "$REPO_URL" "$REPO_REF" "$FRESH"   # -> REPO_DIR, REPO_SHA
 log "commit : $REPO_SHA"
-# onnx/onnxruntime: onnx 런타임 추론용. (native mAP는 pycocotools 불필요 —
-# 케이스 A 도입 시 여기에 pycocotools 추가.)
-ensure_deps "$PY" "$REPO_DIR" "$PYENV_ENV" "$SKIP_DEPS" onnx onnxruntime
+# 런타임별 추가 의존성. onnx일 때만 onnx/onnxruntime이 필요하다.
+#   pytorch/trt는 추가 pip 없음 — torch·tensorrt는 이미 환경(Jetson은 시스템)에 있어야 한다.
+# ⚠ Jetson: requirements.txt에 torch가 있어 pip이 잘못된 휠을 받으려다 깨질 수 있다.
+#   Jetson은 시스템 torch/tensorrt를 쓰는 환경을 미리 만들고 --skip-deps 로 실행할 것.
+RUNTIME_DEPS=()
+[[ "$RUNTIME" == "onnx" ]] && RUNTIME_DEPS=(onnx onnxruntime)
+ensure_deps "$PY" "$REPO_DIR" "$PYENV_ENV" "$SKIP_DEPS" ${RUNTIME_DEPS[@]+"${RUNTIME_DEPS[@]}"}
 
 # ------------------------------------------------------------------ 실행
 OUTDIR="${PROJECT}/${NAME}"

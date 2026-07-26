@@ -30,23 +30,30 @@ python basic_example.py
 
 ---
 
-## 2단계 — ONNX 변환
+## 2단계 — 모델 변환 (ONNX / TensorRT)
 
-`export.py`의 ONNX 경로만 실행해 `.onnx`를 만든다. 산출물은 `.pt`와 같은 위치에 생긴다.
+`export.py`를 감싸 `.onnx` 또는 TensorRT `.engine`을 만든다. 산출물은 `.pt`와 같은 위치.
 
 ```bash
-./export_onnx.sh                         # yolov5s.pt → yolov5s.onnx (opset 18)
-./export_onnx.sh --weights yolov5s.pt --imgsz 640
-./export_onnx.sh --no-infer              # 변환까지만 (추론 검증 생략)
+./export.sh                                  # onnx (cpu) — yolov5s.pt → yolov5s.onnx
+./export.sh --format engine --device 0       # TensorRT 엔진 (GPU/Jetson)
+./export.sh --format engine --device 0 --half  # FP16 엔진 (Jetson 권장)
+./export.sh --format both --device 0         # onnx + engine
+./export.sh --no-infer                       # 변환까지만
 ```
 
 만들어지는 것:
-- `yolov5s.onnx` — 변환된 그래프
-- `yolov5s.onnx.manifest.json` — repo 커밋·패키지 버전·실제 opset 등 재현 정보
-- 끝에 `onnx_infer.py`로 bus.jpg를 한 번 추론해 **변환이 실제로 도는지** 검증 (`--no-infer`로 생략)
+- `yolov5s.onnx` / `yolov5s.engine` — 변환 산출물
+- `yolov5s.onnx.manifest.json` — repo 커밋·패키지 버전·실제 opset 등 재현 정보 (onnx일 때)
+- 끝에 `infer.py`로 bus.jpg를 한 번 추론해 **변환이 실제로 도는지** 검증 (`--no-infer`로 생략)
 
-> ONNX 그래프에는 letterbox·NMS 같은 전후처리가 들어있지 않다. `onnx_infer.py`가 그걸
-> 직접 구현해 검증용으로 쓴다. 벤치마크 본체는 이걸 쓰지 않고 레퍼런스 `detect.py`/`val.py`를 쓴다.
+> **TensorRT 엔진은 빌드한 그 기기·TRT 버전에서만 동작한다.** Jetson용 엔진은 반드시
+> Jetson에서 `./export.sh --format engine`으로 빌드해야 한다(x86에서 만든 `.engine`은 안 됨).
+> Jetson은 tensorrt가 시스템 패키지라 pyenv 환경을 `--system-site-packages`로 만들어야 할 수 있다.
+
+> ONNX/TensorRT 그래프에는 letterbox·NMS 전후처리가 없어 `infer.py`가 직접 구현해 검증용으로 쓴다.
+> `infer.py`는 확장자로 백엔드를 자동 선택한다: `.pt`(PyTorch) / `.onnx`(ORT) / `.engine`(TensorRT).
+> 벤치마크 본체는 이걸 쓰지 않고 레퍼런스 `detect.py`/`val.py`를 쓴다.
 
 ---
 
@@ -78,13 +85,18 @@ python -c "from utils.general import download; \
 
 ## 4단계 — 벤치마크
 
-한 번에 **한 런타임**만 측정한다. 두 런타임을 **같은 `--name`**으로 돌려 결과를 한 폴더에 모은다.
+한 번에 **한 런타임**만 측정한다. 런타임들을 **같은 `--name`**으로 돌려 결과를 한 폴더에 모은다.
+`--runtime`은 `pytorch`(.pt) / `onnx`(.onnx) / `trt`(.engine) 중 하나.
 
 ```bash
 ./benchmark.sh --runtime pytorch --dataset-dir ./datasets/coco --name run1
-./benchmark.sh --runtime onnx    --dataset-dir ./datasets/coco --name run1
-# GPU: --device 0
+./benchmark.sh --runtime onnx    --dataset-dir ./datasets/coco --name run1   # --device 0 로 GPU
+./benchmark.sh --runtime trt     --dataset-dir ./datasets/coco --name run1   # Jetson (GPU 자동)
 ```
+
+> **Jetson에서 trt 실행 시**: yolov5 `requirements.txt`에 torch가 있어 의존성 자동 설치가
+> 시스템 torch/tensorrt와 충돌할 수 있다. 시스템 패키지를 쓰는 환경(`--system-site-packages`)을
+> 미리 만들고 **`--skip-deps`** 로 실행할 것. `.engine`은 그 Jetson에서 `export.sh`로 빌드한 것이어야 한다.
 
 각 실행이 `runs/bench_coco/run1/` 아래에 남기는 것:
 
@@ -135,8 +147,8 @@ python bench_stats.py --csv runs/bench_coco/run1/onnx_latency.csv \
 
 | 파일 | 역할 |
 |---|---|
-| `export_onnx.sh` | `.pt` → `.onnx` 변환 (export.py 래핑) |
-| `onnx_infer.py` | ONNX Runtime 단독 추론 (변환 검증용, yolov5 의존 없음) |
+| `export.sh` | `.pt` → `.onnx` / TensorRT `.engine` 변환 (export.py 래핑) |
+| `infer.py` | 단독 추론 검증 — `.pt`/`.onnx`/`.engine` 자동 선택 (변환 검증용) |
 | `benchmark.sh` | 한 런타임 측정 오케스트레이션 |
 | `bench_run.py` | detect.py/val.py 로그 → CSV + result JSON |
 | `bench_stats.py` | 원본 CSV → 추론시간 통계 |
