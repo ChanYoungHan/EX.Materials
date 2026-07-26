@@ -1,0 +1,34 @@
+# basic_example.py 실행용 의존성
+#
+# basic_example.py는 torch.hub로 ultralytics/yolov5 전체(AutoShape)를 로드해
+# 추론·.pandas()·.save()·.show() 까지 쓰므로, yolov5 런타임 의존성이 모두 필요하다.
+#
+# 설치:  pip install -r requirements.txt
+#
+# 주의(Jetson): torch/torchvision은 pip 대신 NVIDIA가 배포하는 JetPack 전용 휠을
+#   써야 한다(아래 두 줄은 주석 처리하고 시스템/전용 휠 사용). 나머지는 그대로 pip 가능.
+#
+# 참고: export.sh / benchmark.sh 는 필요한 추가 패키지(onnx, onnxruntime 등)를
+#   레포 requirements와 함께 자체적으로 설치하므로 여기 포함하지 않는다.
+
+# --- 핵심: 모델 로드·추론 ---
+torch>=1.8.0
+torchvision>=0.9.0
+ultralytics>=8.2.34        # models/common.py가 import (Annotator, colors, save_one_box)
+
+# --- 전처리·입출력·결과 처리 ---
+numpy>=1.23.5
+opencv-python>=4.1.1
+pillow>=10.3.0
+requests>=2.32.2           # torch.hub의 URL 이미지 다운로드
+PyYAML>=5.3.1
+tqdm>=4.66.3
+pandas>=1.1.4              # results.pandas()
+matplotlib>=3.3            # results.show()/plotting
+seaborn>=0.11.0
+
+# --- yolov5 hubconf가 요구하는 부수 패키지 ---
+scipy>=1.4.1
+psutil
+gitpython>=3.1.30
+thop>=0.1.1                # FLOPs 계산 (모델 로드 시 요약 출력)
